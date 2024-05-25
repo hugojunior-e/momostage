@@ -1,0 +1,22 @@
+<html>
+
+<head>
+	<title>MoMoStage Designer - Sequences</title>
+    <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+	<link rel="StyleSheet" href="/static/styles/tree.css" type="text/css">
+	<script type="text/javascript" src="/static/js/functions.js"></script>
+</head>
+
+<body>
+	<div class=area style="top: 10;left: 10px; right: 10; bottom: 10; overflow:scroll" >
+		<span class="titulo">Sequences </span><hr>
+		<div id="id_values"></div>
+	</div>
+
+    <script>
+        do_result_set("job_list_sequences",[], function(a) {
+			document.all.id_values.innerHTML = a;
+		});
+    </script>
+</body>
+</html>

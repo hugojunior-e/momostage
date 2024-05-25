@@ -1,0 +1,59 @@
+<html>
+<head>
+	<title>MoMoStage Designer</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+	<link rel="StyleSheet" href="/static/styles/tree.css" type="text/css">
+	<script type="text/javascript" src="/static/js/tree.js"></script>
+	<script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+
+	<script type="text/javascript">
+		{{ load_repository }}
+
+
+		function list_process_running() {
+			$.ajax({url:"/status_cpu_mem",type:"POST",data:{}, success:function(ret){
+				document.all.id_status_cpu_mem.innerHTML = ret;
+			}});
+
+			$.ajax({url:"/list_process_running",type:"POST",data:{}, success:function(ret){
+				document.all.id_process_running.innerHTML = ret;
+			}});
+
+			setTimeout("list_process_running()",30000);
+		}		
+	</SCRIPT>	
+</head>
+
+<body>
+    <div> 
+		<input type=button class=botao onclick="window.location.reload()" value="Reload Repository">
+		<input type=button class=botao onclick="window.open('/newjob...')" value="Create new Job">
+		<input type=button class=botao onclick="window.open('/globals')" value="Parameters Globals">
+		<input type=button class=botao onclick="window.open('/sequencejobs')" value="Sequence Jobs">
+    </div>
+
+    <hr>
+
+	<div class="area" style="top: 80;bottom: 10;left: 10;width: 350; overflow:auto;">
+		<script type="text/javascript">
+			createTree(Tree);
+
+		</script>
+	</div>
+
+
+	<div class="area" style="top: 80; left:400; right: 10; ;height:300">
+		<span class="titulo">CPU/Memory Monitor </span>
+		<div><pre id="id_status_cpu_mem" style="font-size: 12;"></pre></div>
+	</div>
+
+	<div class="area" style="top: 400; left:400;right: 10;height:300">
+		<span class="titulo">Process Running Now </span>
+		<div><pre id="id_process_running" style="font-size: 12;"></pre></div>
+	</div>
+
+	<script>
+		list_process_running();
+	</script>
+</body>
+</html>

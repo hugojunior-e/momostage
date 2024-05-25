@@ -1,0 +1,47 @@
+<html>
+
+<head>
+	<title>MoMoStage Designer - Globals</title>
+    <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+	<link rel="StyleSheet" href="/static/styles/tree.css" type="text/css">
+	<script type="text/javascript" src="/static/js/functions.js"></script>
+
+    <script>
+		function js_param_value(x) {
+			do_result_set("job_globals.all",[x],function(a){
+				document.all.id_parametros_values.innerHTML = a;
+				(document.all.id_parametros_values.querySelectorAll("table")[0]).style = 'border-collapse: collapse;';
+				document.all.id_parametros_values.querySelectorAll("tr").forEach(e => {
+    				e.style = 'border-bottom: 1pt solid black;'
+				});				
+			});
+		}        
+    </script>
+</head>
+
+<body>
+    <div class=area style="top: 10;left: 10; width:280px;">
+        <span class="titulo">Parameters Availables</span><hr>
+        <div  id="id_parametros"> </div>
+    </div>
+
+	<div class=area style="top: 10;left: 310px; right: 10; bottom: 10; overflow:scroll" >
+		<span class="titulo">Parameters/Values Configured </span><hr>
+		<div id="id_parametros_values"></div>
+	</div>
+
+
+    <script>
+        do_result_set("job_globals.group_name", [], function(a) {
+			document.all.id_parametros.innerHTML = a;
+			document.all.id_parametros.querySelectorAll("td").forEach(e => {
+				if ( e.id == '_')
+				  e.innerHTML = e.innerHTML + "<hr>";
+				else
+    			  e.innerHTML = "<a href=# onclick=js_param_value('" + e.innerHTML + "') >" + e.innerHTML + "</a><hr>";
+			});
+		});		
+        
+    </script>
+</body>
+</html>
