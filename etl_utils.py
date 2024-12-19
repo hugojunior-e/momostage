@@ -1,4 +1,4 @@
-import cx_Oracle
+import oracledb
 from datetime import datetime
 import json
 
@@ -32,7 +32,7 @@ SELECT transf,
    and reg_sts = 1
  order by job_order
 """
-##--select parametro from dwadm.vw_jobs_run where lote_id = %s and nome = '%s'
+
 CONSTANT_SQL_JOB_PARAMETERS = """
 select parametro from dwadm.vw_jobs_run where lote_id = %s and nome = '%s'
 """
@@ -42,13 +42,13 @@ CONSTANT_QTD_THREADS = 6
 LOG_MAP = {}
 
 def local_db():
-   x = cx_Oracle.connect("dwetl/etlprd@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-prd.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWPRD)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))", encoding='UTF-8', nencoding='UTF-8')
+   x = oracledb.connect("dwetl/etlprd@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-prd.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWPRD)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))", encoding='UTF-8', nencoding='UTF-8')
    return x
 
 
 def connect_db(dbname):
   dados = json.loads(get_param_value("DATABASES", dbname.upper()))
-  x = cx_Oracle.connect(f"{dados['usr']}/{dados['pwd']}@{dados['tns']}", encoding='UTF-8', nencoding='UTF-8')
+  x = oracledb.connect(f"{dados['usr']}/{dados['pwd']}@{dados['tns']}", encoding='UTF-8', nencoding='UTF-8')
   return x
 
 

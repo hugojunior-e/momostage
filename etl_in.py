@@ -2,11 +2,10 @@ from genericpath import isfile
 import etl_utils
 import etl_odata
 import boto3
-import random
+import uuid
 import json
 import os
 import xml.etree.ElementTree as ET
-from datetime import datetime
 
 
 from unicodedata import normalize
@@ -22,7 +21,7 @@ class ETL_IN:
     self.logger_id  = logger_id
 
     if self.config['C_TYPE'] == 'boto3':
-      self.hash_name    = "/tmp/" + ("%032x" % random.getrandbits(128))
+      self.hash_name    = "/tmp/" + str(uuid.uuid4())
 
     if self.config['C_TYPE'] == "sql":
         self.db  = etl_utils.connect_db( self.config['C_SQL_DB'] )

@@ -1,7 +1,60 @@
 body {
-	font-family: Verdana, Geneva, Arial, Helvetica, sans-serif;
-	font-size: 14px;
+  margin: 0;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
 }
+
+.menu {
+  background-color: #333;
+  color: white;
+  padding: 10px;
+  display: flex;
+  justify-content: space-around;
+}
+
+.menu button {
+  background-color: #444;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 16px;
+  border-radius: 5px;
+}
+
+.menu button:hover {
+  background-color: #555;
+}
+
+.content {
+  display: flex;
+  flex-grow: 1;
+}
+
+.column1 {
+  width: 300px;
+  min-width: 300px;
+  background-color: #FFFFFF;
+  padding: 20px;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.column2 {
+  flex-grow: 1;
+  background-color: #e0e0e0;
+  padding: 20px;
+}
+
+.footer img {
+  position: absolute; /* Fixa a imagem no rodapé */
+  bottom: 10px; /* Distância do rodapé */
+  right: 10px; /* Distância da lateral direita */
+  width: 150px; /* Tamanho da imagem */
+  height: auto;
+}
+
 
 
 .table_job {
@@ -40,7 +93,6 @@ textarea {
 }
 
 .area {
-  position: fixed;
   white-space: nowrap;
   border-color: #000;
   border-style: none;
@@ -120,7 +172,7 @@ textarea {
 .dropdown-content {
   display: none;
   position: absolute;
-  min-width: 120px;
+  min-width: 200px;
   box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
   z-index: 2;
 }

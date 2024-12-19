@@ -1,6 +1,6 @@
 #!/home/producao/Python/Python37/bin/python3
 
-import cx_Oracle
+import oracledb
 import sys
 import os
 from unicodedata import normalize

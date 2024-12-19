@@ -4,7 +4,7 @@
 
 import sys
 import os
-import cx_Oracle
+import oracledb
 import multiprocessing
 import time
 import atexit

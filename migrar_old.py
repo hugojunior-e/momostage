@@ -1,6 +1,6 @@
 #!/home/producao/Python/Python37/bin/python3
 
-import cx_Oracle
+import oracledb
 import sys
 import os
 from unicodedata import normalize
@@ -75,7 +75,7 @@ C1_SQL_AFTER=None
 C1_SQL_BEFORE="{truncate_table}"
 '''
 
-db = cx_Oracle.connect('hugoa/Peneira#754#asd@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-prd.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWPRD)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))')
+db = oracledb.connect('hugoa/Peneira#754#asd@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-prd.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWPRD)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))')
 cur = db.cursor()
 cur.execute( f"delete job_def where job_name='{job}' ")
 cur.execute("insert into job_def values (:1,:2,:3,:4,:5,:6)", (job, 'ODS', origin_sql, target_sql,None,parametros.strip() ) )

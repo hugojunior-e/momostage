@@ -1,13 +1,11 @@
-#!/home/producao/Python/Python37/bin/python3
-
 import os
 import subprocess
-import cx_Oracle
+import oracledb
 from flask import Flask, redirect, render_template, request, session, url_for
 from markupsafe import Markup, escape
 
 app                 = Flask(__name__)
-app.db              = cx_Oracle.connect('dwreports/"!*R3P0RTSB1"@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-prd.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWPRD)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))', encoding='UTF-8', nencoding='UTF-8') 
+app.db              = oracledb.connect(dsn="exa03-scan-prd.network.ctbc:1521/DWPRD", user="hugoa", password="Bancodedados#147") 
 app.lista_databases = []
 app.lista_auths_sap = []
 app.lista_projetos  = []

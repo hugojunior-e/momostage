@@ -261,10 +261,8 @@
 
 
 
-
-
 <body>
-    <div>
+    <div class="menu">
         <input type="button" class="botao" onclick="js_job_save()"            value="Save">
         <input type="button" class="botao" onclick="js_log_lotes()"           value="View Log">
         <input type="button" class="botao" onclick="js_executar_parametros()" value="Run">
@@ -272,23 +270,24 @@
         <span id="id_title_page"></span>
     </div>
 
-    <hr>
+    <div class="content">
+        <div class="column1" align=center>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_sql.png       type_obj="sql">     <br>Database {{menu1}}    </div><br><br>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_filename.png  type_obj="filename"><br>CSV {{menu1}}         </div><br><br>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_odata.png     type_obj="odata">   <br>ODATA/SAP {{menu2}}   </div><br><br>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_dataset.png   type_obj="dataset"> <br>Dataset {{menu4}}     </div><br><br>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer {{menu3}} </div><br><br>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) {{menu1}}     </div><br><br>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML {{menu1}}         </div><br><br>
 
-    <div class=area style="top: 80;bottom: 10;left: 10;width: 200; overflow:auto; text-align: center">
-        <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_sql.png       type_obj="sql">     <br>Database {{menu1}}    </div><br><br>
-        <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_filename.png  type_obj="filename"><br>CSV {{menu1}}         </div><br><br>
-        <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_odata.png     type_obj="odata">   <br>ODATA/SAP {{menu2}}   </div><br><br>
-        <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_dataset.png   type_obj="dataset"> <br>Dataset {{menu4}}     </div><br><br>
-        <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer {{menu3}} </div><br><br>
-        <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) {{menu1}}     </div><br><br>
-        <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML {{menu1}}         </div><br><br><br><br><br><br>
+        </div>
+
+
+        <div class="column2">
+            <table class="table_job" width=100%  height="100%" id="id_tabela"></table>                
+        </div>
     </div>
-    
 
-
-    <div class=area style="top: 80;bottom: 10;left: 210;overflow:auto;right: 10;">
-        <table class="table_job" width=100%  height="100%" id="id_tabela"></table>                
-    </div>            
 
 
 
@@ -480,9 +479,11 @@
     </div>     
 
 
+
     <script> 
         js_job_load(); 
         setTitles();
     </script>
+
 </body>
 </html>

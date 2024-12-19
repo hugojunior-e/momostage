@@ -1,3 +1,6 @@
+
+
+
 <html>
 <head>
 	<title>MoMoStage Designer</title>
@@ -23,37 +26,46 @@
 		}		
 	</SCRIPT>	
 </head>
-
 <body>
-    <div> 
+    <div class="menu">
 		<input type=button class=botao onclick="window.location.reload()" value="Reload Repository">
 		<input type=button class=botao onclick="window.open('/newjob...')" value="Create new Job">
 		<input type=button class=botao onclick="window.open('/globals')" value="Parameters Globals">
 		<input type=button class=botao onclick="window.open('/sequencejobs')" value="Sequence Jobs">
     </div>
+    <div class="content">
+        <div class="column1">
 
-    <hr>
+			<div class="area">
+				<script type="text/javascript">
+					createTree(Tree);
+				</script>
+			</div>
 
-	<div class="area" style="top: 80;bottom: 10;left: 10;width: 350; overflow:auto;">
-		<script type="text/javascript">
-			createTree(Tree);
-
-		</script>
-	</div>
+			<div class="footer">
+				<img src="/static/img/mm.png">
+			</div>
 
 
-	<div class="area" style="top: 80; left:400; right: 10; ;height:300">
-		<span class="titulo">CPU/Memory Monitor </span>
-		<div><pre id="id_status_cpu_mem" style="font-size: 12;"></pre></div>
-	</div>
+        </div>
+        <div class="column2">
 
-	<div class="area" style="top: 400; left:400;right: 10;height:300">
-		<span class="titulo">Process Running Now </span>
-		<div><pre id="id_process_running" style="font-size: 12;"></pre></div>
-	</div>
+			<div class="area" >
+				<span class="titulo">CPU/Memory Monitor </span>
+				<div><pre id="id_status_cpu_mem" style="font-size: 12;"></pre></div>
+			</div>
+		
+			<div class="area" >
+				<span class="titulo">Process Running Now </span>
+				<div><pre id="id_process_running" style="font-size: 12;"></pre></div>
+			</div>
+
+        </div>
+    </div>
 
 	<script>
 		list_process_running();
 	</script>
+
 </body>
 </html>
