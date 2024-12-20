@@ -1,11 +1,13 @@
 import os
+import etl.etl_utils
 import subprocess
-import oracledb
+import cx_Oracle
 from flask import Flask, redirect, render_template, request, session, url_for
 from markupsafe import Markup, escape
 
+
 app                 = Flask(__name__)
-app.db              = oracledb.connect(dsn="exa03-scan-prd.network.ctbc:1521/DWPRD", user="hugoa", password="Bancodedados#147") 
+app.db              = etl.etl_utils.local_db()
 app.lista_databases = []
 app.lista_auths_sap = []
 app.lista_projetos  = []

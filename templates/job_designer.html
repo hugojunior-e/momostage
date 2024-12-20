@@ -113,7 +113,6 @@
                     return;    
                 }
                 
-                qtd                              = forms.JOB_COUNT;
                 document.all.id_tabela.innerHTML = forms.JOB;
 
 
@@ -195,11 +194,10 @@
                 }
                 document.getElementById('id_' + type + '_edit').style.display  = 'block';
                 
-                if (job_name == 'newjob')
-                  return;
+
                 nome = document.getElementById("C_" + type.toUpperCase() + "_NAME" );
                 if ( nome != null )
-                  nome.value = g_objeto.attributes['C_NAME'];
+                  nome.value = g_objeto.attributes['C_NAME'] || 'name_comp';
 
                 data_get(g_objeto.attributes, g_transform  , local);
                 data_get(g_objeto.attributes, g_components , local);
@@ -248,7 +246,7 @@
             txt            = '<input local="' + local + '" class=dropbtn type=image type_obj="' + ooo.attributes['type_obj'].value + '" src="' + ooo.src + '">';
             node           = document.createElement("div");
             node.className = "dropdown";
-            node.innerHTML = txt + menu;
+            node.innerHTML = txt + menu + "<br><span></span>";
             document.getElementById('id_' + local + '_0').appendChild(node);
             document.getElementById('id_' + local + '_0').appendChild(document.createElement("br"));
             document.getElementById('id_' + local + '_0').appendChild(document.createElement("br"));

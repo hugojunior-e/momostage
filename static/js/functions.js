@@ -9,12 +9,12 @@ g_transform = ['TRANSFORM_DATA','TRANSFORM_FILTER','TRANSFORM_LOOKUPS'];
 
 g_components = [
     'C_TYPE','C_NAME',
-    'C_ODATA_TH_COUNT','C_ODATA_TH_SIZE','C_ODATA_URL','C_ODATA_AUTH','C_ODATA_FIELDS',
     'C_SQL_DB','C_SQL','C_SQL_AFTER','C_SQL_BEFORE','C_SQL_FIELDS/target','C_SQL_TYPE/target','C_SQL_AUTO/target',
     'C_FILENAME','C_FILENAME_FD','C_FILENAME_FIELDS/target','C_FILENAME_FILE_REQUIRED/orig',
+    'C_ODATA_TH_COUNT','C_ODATA_TH_SIZE','C_ODATA_URL','C_ODATA_AUTH','C_ODATA_FIELDS',
+    'C_DATASET','C_DATASET_FIELDS',
     'C_BOTO3_BUCKET','C_BOTO3_FILENAME','C_BOTO3_FD','C_BOTO3_FIELDS',
-    'C_XML_FILENAME','C_XML_FIELDS','C_XML_FILE_REQUIRED/orig',
-    'C_DATASET','C_DATASET_FIELDS'
+    'C_XML_FILENAME','C_XML_FIELDS','C_XML_FILE_REQUIRED/orig'
 ];
 
 
@@ -102,10 +102,10 @@ function data_get(data, data_fields, local) {
 function data_put(list_obj, g_objeto) {
     list_obj.forEach(e => { 
         dados = e.split("/");
-        if ( g_objeto.attributes[ dados[0] ] != null ) {
+
+        if ( dados[0].startsWith("C_" + g_objeto.attributes['C_TYPE'].toUpperCase()) ) {
             ele   = document.getElementById( dados[0] );
-            if (ele != null )
-            {
+            if (ele != null )   {
                 g_objeto.attributes[ dados[0] ]  = ele.value;
             }
         }
