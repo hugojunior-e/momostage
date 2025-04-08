@@ -1,6 +1,11 @@
-import cx_Oracle
-from datetime import datetime
+import oracledb
 import json
+import uuid
+import os
+from datetime import datetime
+
+CONSTANT_OWNER = "DWADM"
+
 
 CONSTANT_TRANSFORMS = """
 def C_TRANS(records, lookups):
@@ -13,42 +18,40 @@ def C_TRANS(records, lookups):
   return C_OUTPUT
 """
 
-CONSTANT_SQL_JOB = """
+CONSTANT_SQL_JOB = f"""
 SELECT origin,
        target,
        hasheds
-  FROM DWADM.ms_job_def 
+  FROM {CONSTANT_OWNER}.ms_job_def 
  where job_name = '%s'
    and reg_sts = 1
 """
 
 
-CONSTANT_SQL_JOB_TRANSF = """
+CONSTANT_SQL_JOB_TRANSF = f"""
 SELECT transf,
        filter,
        lookups
-  FROM DWADM.ms_job_transf 
+  FROM {CONSTANT_OWNER}.ms_job_transf 
  where job_name = '%s'
    and reg_sts = 1
  order by job_order
 """
 
-CONSTANT_SQL_JOB_PARAMETERS = """
-select parametro from dwadm.vw_jobs_run where lote_id = %s and nome = '%s'
+CONSTANT_SQL_JOB_PARAMETERS = f"""
+select parametro from {CONSTANT_OWNER}.vw_jobs_run where lote_id = %s and nome = '%s'
 """
 
 CONSTANT_QTD_THREADS = 6
 
-LOG_MAP = {}
-
 def local_db():
-   x = cx_Oracle.connect("hugoa/BandoDados#147@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-prd.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWPRD)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))", encoding='UTF-8', nencoding='UTF-8')
+   x = oracledb.connect(dsn="(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-stg.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWHOM)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))", user="dwadm", password="dwtst")
    return x
 
 
 def connect_db(dbname):
   dados = json.loads(get_param_value("DATABASES", dbname.upper()))
-  x = cx_Oracle.connect(f"{dados['usr']}/{dados['pwd']}@{dados['tns']}", encoding='UTF-8', nencoding='UTF-8')
+  x = oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dados['tns'])
   return x
 
 
@@ -59,79 +62,81 @@ def diff_date(d1, d2):
 def get_logger_id():
   db  = local_db()
   cur = db.cursor()
-  cur.execute("select DWADM.ms_job_logger_id_seq.nextval from dual")
+  cur.execute( f"select {CONSTANT_OWNER}.ms_job_logger_id_seq.nextval from dual" )
   ret = cur.fetchone()[0]
-  db.close()
-  return ret
-
-
-def get_job_type(job_name):
-  db  = local_db()
-  cur = db.cursor()
-  cur.execute("""SELECT job_type
-                  FROM DWADM.ms_job_def 
-                where job_name = '%s'
-                  and reg_sts = 1
-                """ % (job_name))
-  ret = cur.fetchone()[0]
-  cur.close()
   db.close()
   return ret
 
 def get_param_value(group_name, param_name):
   db  = local_db()
   cur = db.cursor()
-  cur.execute("""SELECT param_value
-                  FROM DWADM.ms_job_globals
-                where group_name = '%s'
-                  and param_name = '%s'
-                """ % (group_name, param_name))
+  cur.execute(f"""SELECT param_value FROM {CONSTANT_OWNER}.ms_job_globals where group_name = '%s' and param_name = '%s' """ % (group_name, param_name))
   ret = cur.fetchone()[0]
   cur.close()
   db.close()
   return ret
 
-def get_job_list(job_name):
-  db  = local_db()
-  cur = db.cursor()
-  cur.execute("""SELECT job_name
-                  FROM DWADM.ms_job_def 
-                where job_name LIKE '%s'
-                  and reg_sts = 1
-                """ % (job_name + ".OCI%"))
-  lista = [r[0] for r in cur.fetchall()]
-  cur.close()
-  db.close()
-  return lista
+def get_tmp_dir():
+   ret = get_param_value('PARAMETERS','TEMP_DIR')
+   if "AlgarETL" in ret:
+      return "/algar/temp_mms"
+   return ret
 
 
+def generate_hash(prefix="", with_hash=True):
+  hash     = str(uuid.uuid4()) if with_hash else ""
+  path_sep = "_" if with_hash and len(prefix) > 0 else ""
 
-db_log    = local_db()
+  return f"{ get_tmp_dir() }{ os.path.sep }{ prefix }{ path_sep }{ hash }"
+
+
+def clean_and_convert_tuples(data, remove_chars=None):
+  if remove_chars is None:
+      remove_chars = "\n\t\";"
+
+  def clean_field(field):
+      if isinstance(field, str):
+          for char in remove_chars:
+              field = field.replace(char, "")
+      return field
+
+  result = [
+      [clean_field(field) for field in row]
+      for row in data
+  ]
+
+  return result
+
+
+#=======================================================================================================
+# tratativa de log
+#=======================================================================================================
+
+LOG_MAP        = {}
+LOG_PREFIX     = {}  
+
+def log_add_prefix(prefix):
+  LOG_PREFIX[ f"th_{ os.getpid() }" ] = prefix   
 
 def log(logger_id, msg, shortcut="I",logbigdata=""):
-  global LOG_MAP
-  job_name  = LOG_MAP[logger_id]['job_name']
-  lote_id   = LOG_MAP[logger_id]['lote_id']
-  log_seq   = LOG_MAP[logger_id]['log_seq']
-  log_out   = LOG_MAP[logger_id]['log_out']
+    job_name    = LOG_MAP[logger_id]['job_name']
+    lote_id     = LOG_MAP[logger_id]['lote_id']
+    log_seq     = LOG_MAP[logger_id]['log_seq']
+    log_prefix  = LOG_PREFIX.get( f"th_{ os.getpid() }"  )
 
-  try:
-      if msg == "#":
-         msg = "-" * 50
+    if log_prefix == None:
+        log_prefix = ""
 
-      cur = db_log.cursor()
-      cur.execute("""begin
-                  INSERT INTO DWADM.ms_job_LOGGER(JOB_NAME, PARAM_ID, CREATED_AT, LINE, LINE_ID, JOB_GROUP_ID, LINE_TYPE,LOGBIGDATA)  VALUES (:1,:2,SYSDATE,:3,:4,:5,:6,:7);
-                  commit;
-                end;""", (job_name, lote_id, msg, log_seq, logger_id, shortcut, logbigdata))
-      cur.close()
-      LOG_MAP[logger_id]['log_seq'] = LOG_MAP[logger_id]['log_seq'] + 1
-  except:
-      print("erro")
+    LOG_MAP[logger_id]['log_seq'] = log_seq + 1
 
-  if log_out == None:
-      print(f'{ datetime.now().strftime("%m/%d/%Y %H:%M:%S") }:[{job_name}]: {msg}')
-  else:
-      log_out(f"[{job_name}] : {msg}")
+    if msg == "#":
+        msg = "-" * 50
+       
+    #mensagem =  (job_name, lote_id, msg, log_seq, logger_id, shortcut, logbigdata)
+    
+    #self.cur.execute(f"""begin
+    #            INSERT INTO {etl_utils.CONSTANT_OWNER}.ms_job_LOGGER(JOB_NAME, PARAM_ID, CREATED_AT, LINE, LINE_ID, JOB_GROUP_ID, LINE_TYPE,LOGBIGDATA)  VALUES (:1,:2,SYSDATE,:3,:4,:5,:6,:7);
+    #            commit;
+    #            end;""", mensagem )            
 
-  
+    print(f'{ datetime.now().strftime("%m/%d/%Y %H:%M:%S") }:[{job_name}]: {log_prefix}{msg}')  

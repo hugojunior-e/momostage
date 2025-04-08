@@ -1,33 +1,30 @@
-#!/home/producao/Python/Python37/bin/python3
-
 import etl_utils
 import etl_hash
 import etl_in
 import etl_out
 import multiprocessing
-import time
 import os
 import gc
 from datetime import datetime
 
 
-#######################################################
-
-
 class ETL:
-  def __init__(self, job_name, lote_id, logger_id, log_out=None):
-    etl_utils.LOG_MAP[logger_id] = {"job_name":job_name, "lote_id":lote_id, "log_out":log_out, "log_seq":0}
-    self.logger_id       = logger_id
+  def __init__(self, job_name, lote_id):
     self.job_name        = job_name
     self.lote_id         = lote_id
-    self.logger_id       = logger_id
-
+    self.logger_id       = etl_utils.get_logger_id()
     self.transformations = []
     self.config_orig     = {}
     self.config_target   = {}
 
+    etl_utils.LOG_MAP[self.logger_id] = {"job_name":job_name, "lote_id":lote_id, "log_seq":0}
 
-  #---------------------------------------------------------
+
+
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
 
   def transform(self, dados, lookups):
     if len(self.transformations) == 0:
@@ -37,24 +34,25 @@ class ETL:
       return r['C_TRANS'](dados, lookups)
 
 
-  #---------------------------------------------------------
+  #=======================================================================================================
+  #
+  #=======================================================================================================
 
-  def run_job_thread(self,m_resto, m_qtd, l_status):
-    etapa = "S"
+
+  def run_job_thread(self,m_resto=0, m_qtd=1, l_thread_list=None):
+    etl_utils.log_add_prefix( "" if m_qtd == 1 else f"INST=[{m_resto}/{m_qtd}] " )
+    
+    etapa      = "S"
     try:
-      inn       = etl_in.ETL_IN(self.config_orig,logger_id=self.logger_id)
-      
+      inn       = etl_in.ETL_IN(self.config_orig,logger_id=self.logger_id, m_qtd=m_qtd, m_resto=m_resto)
       l_saidas  = []
 
       for idx in range( self.config_target['C_OUT_COUNT'] ):
         ss = etl_out.ETL_OUT(idx, self.config_target,m_resto,logger_id=self.logger_id)
         l_saidas.append(ss)
 
-      sql = None
-      if self.config_orig['C_TYPE'] == "sql":
-        sql = self.config_orig['C_SQL'].replace("#RESTO#", str(m_resto)).replace("#MOD#", str(m_qtd)) 
-      
       etl_utils.log(self.logger_id, "Loading hasheds.")
+
       lookups = {}
       for r in self.c_hasheds.strip().split("\n"):
         if len(r) > 1:
@@ -63,7 +61,7 @@ class ETL:
       qtd  = 0
       while True:
         etapa = "Loading Data..."
-        dados = inn.getData( sql )
+        dados = inn.getData()
 
         if len(dados) == 0:
           break
@@ -71,7 +69,7 @@ class ETL:
         qtd = qtd + len(dados)
 
         if qtd % 250000 == 0:
-          etl_utils.log(self.logger_id,  f"qtd_parc={qtd:,}" if m_qtd == 1 else f"INST({m_resto}/{m_qtd}): qtd_parc={qtd:,}" , shortcut="D" )
+          etl_utils.log(self.logger_id,  f"qtd_parc={qtd:,}" , shortcut="D" )
 
         etapa = "Transforming..."
         x   = self.transform(dados, lookups)
@@ -84,24 +82,28 @@ class ETL:
         del x
         gc.collect()
 
+      etl_utils.log(self.logger_id,  f"FetchALL={qtd:,}"  )
+
       for saida in l_saidas:
         saida.finishing()
-          
-      etl_utils.log(self.logger_id,  f"qtd_total={qtd:,}" if m_qtd == 1 else  f"INST({m_resto}/{m_qtd}): qtd_total={qtd:,}"  )
 
-      l_status[m_resto] = 0
-      multiprocessing.current_process().status = 0
+      if l_thread_list:
+        l_thread_list[m_resto] = [0,'SUCESSO']
+      return (0,"SUCESSO")
     except Exception as e:
-      l_status[m_resto] = -1
-      etl_utils.log(self.logger_id,  f"Mod: {m_resto}/{m_qtd} Point: {etapa} Error: {str(e)}" )
+      MSG                         = f"POINT: {etapa} MSG: {str(e)}"
+      if l_thread_list:
+        l_thread_list[m_resto] = [-1, MSG]
+      return (-1, MSG)
 
 
 
-  #---------------------------------------------------------
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
 
   def run_job(self):
-    statusExecutionSucess = True
-
     etl_utils.log(self.logger_id, "Executing IN.before" )
     inn = etl_in.ETL_IN(self.config_orig,logger_id=self.logger_id)
     inn.prepareBefore()
@@ -112,35 +114,39 @@ class ETL:
       ou = etl_out.ETL_OUT(idx, self.config_target, -1,logger_id=self.logger_id)
       ou.prepareBefore()
 
-    l_thread = []
-    l_thread_status = multiprocessing.Manager().list()
-    qtd_mod  = inn.getQtdInst()
+    
+    qtd_mod         = inn.qtd_inst
 
     etl_utils.log(self.logger_id, "Preparing..." )
-    
-    for i in range(qtd_mod):
-      if qtd_mod > 1:
+
+    if qtd_mod == 1:
+      etl_utils.log(self.logger_id,  f"Executing Job...Start")
+      statusCode, statusMsg = self.run_job_thread()
+      etl_utils.log(self.logger_id,  f"Executing Job...Finish - { statusCode }")
+
+      if statusCode == -1:
+        raise Exception(statusMsg)
+      
+    else:
+      l_thread      = []
+      l_thread_list = multiprocessing.Manager().list()
+
+      for i in range(qtd_mod):
         etl_utils.log(self.logger_id,  f"Threading Instance {i}" )
-        t        = multiprocessing.Process(target=self.run_job_thread, args=(i,qtd_mod,l_thread_status,) )
-        l_thread_status.append(1)
+
+        l_thread_list.append( [1,'-']  )
+
+        t        = multiprocessing.Process(target=self.run_job_thread, args=(i,qtd_mod,l_thread_list,) )
         l_thread.append(t)
         t.start()
-        time.sleep(2)
-      else:
-        etl_utils.log(self.logger_id,  f"Executing Job...")
-        l_thread_status.append(1)
-        self.run_job_thread(i,qtd_mod, l_thread_status)
-        etl_utils.log(self.logger_id,  f"Direct: Status: {l_thread_status[i]}" )
-        statusExecutionSucess = l_thread_status[i] == 0
 
-    for i, x in enumerate(l_thread):
-      x.join()
-      etl_utils.log(self.logger_id,  f"Thread: {i} Status: {l_thread_status[i]}" )
-      if l_thread_status[i] != 0:
-        statusExecutionSucess = False
-    
-    if statusExecutionSucess == False:
-      raise Exception("Error")
+      for i, x in enumerate(l_thread):
+        x.join()
+        s,m = l_thread_list[i]
+
+        etl_utils.log(self.logger_id,  f"Thread: {i} Status: {s}" )
+        if s != 0:
+          raise Exception(m)      
     
     etl_utils.log(self.logger_id, "Executing OUT.after" )
     for idx in range( self.config_target['C_OUT_COUNT'] ):
@@ -148,9 +154,10 @@ class ETL:
       ou.prepareAfter()
 
 
-  #--------------------------------------------------------------------------------------------
-  # bloco principal
-  #--------------------------------------------------------------------------------------------
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
 
 
   def apply_filter(self, parameter_job, parameter_text):
@@ -166,21 +173,22 @@ class ETL:
 
 
   def run(self):
+    dt_ini     = datetime.now()
+    status_ret = 0
+
     try:
       etl_utils.log(self.logger_id, "#")
       etl_utils.log(self.logger_id, "### Preparing Parameters/Configuration")
       etl_utils.log(self.logger_id, "#")
-
-
-      dt_ini = datetime.now()
-
       etl_utils.log(self.logger_id, f"lote_id= {self.lote_id}")
       etl_utils.log(self.logger_id, "Loading Params.")
 
       cur_dw                = etl_utils.local_db().cursor()
       origin,target,hasheds = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB % (self.job_name) ).fetchone()
       transforms            = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB_TRANSF % (self.job_name) ).fetchall()
-      parameter_job         = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB_PARAMETERS % (self.lote_id, self.job_name) ).fetchone()
+      
+      parameter_job         = None  #cur_dw.execute( etl_utils.CONSTANT_SQL_JOB_PARAMETERS % (self.lote_id, self.job_name) ).fetchone()
+
       c_origin              = self.apply_filter( parameter_job, origin.read() )
       c_target              = self.apply_filter( parameter_job, target.read() )
       self.c_hasheds        = self.apply_filter( parameter_job, "" if hasheds == None else hasheds.read() )
@@ -254,9 +262,9 @@ class ETL:
       etl_utils.log(self.logger_id, "#")
 
       self.run_job()
-      etl_utils.log(self.logger_id, "Time Elapsed: " + etl_utils.diff_date(datetime.now() , dt_ini ) )
-
-      return 0
     except Exception as e:
-      etl_utils.log(self.logger_id,  str(e)  )
-      return 1
+      etl_utils.log(self.logger_id, "ERROR: " + str(e)  )
+      status_ret = 1
+    finally:
+      etl_utils.log(self.logger_id, "Time Elapsed: " + etl_utils.diff_date(datetime.now() , dt_ini ) )
+      etl_utils.log(self.logger_id, f"STATUS:{ "OK" if status_ret == 0 else "ERRO"}")

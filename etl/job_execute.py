@@ -1,7 +1,14 @@
 #!/usr/bin/python3
 
-import etl_manager
-import sys
+import etl
+import platform
+import multiprocessing
 
-mng = etl_manager.ETL_MANAGER(sys.argv[1], -999)
+
+if platform.system() == "Windows":
+    multiprocessing.freeze_support()    
+job_name = "d_customer"
+job_lote = 999
+
+mng = etl.ETL( job_name , job_lote)
 mng.run()

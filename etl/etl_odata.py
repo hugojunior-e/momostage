@@ -17,18 +17,19 @@ class ETL_ODATA:
     error    = None
     error_bd = None
 
-    def __init__(self, P_QTD_TH, P_QTD_TH_SZ,P_URL,P_AUTH,P_FLD,logger_id):
-        self.P_QTD_TH     = int(P_QTD_TH)
-        self.P_QTD_TH_SZ  = int(P_QTD_TH_SZ)
-        self.P_URL        = P_URL
+    def __init__(self,config,logger_id):
+        self.config       = config
+        self.P_QTD_TH     = int( self.config['C_ODATA_TH_COUNT'] )
+        self.P_QTD_TH_SZ  = int( self.config['C_ODATA_TH_SIZE'] )
+        self.P_URL        = self.config['C_ODATA_URL']
         self.logger_id    = logger_id
 
         urllib3.disable_warnings()
 
-        d                 = json.loads( etl_utils.get_param_value("AUTHS.SAP", P_AUTH) )
+        d                 = json.loads( etl_utils.get_param_value("AUTHS.SAP", self.config['C_ODATA_AUTH']  ) )
         self.P_USR        = d['usr']
         self.P_PWD        = d['pwd']
-        self.P_FLD        = P_FLD
+        self.P_FLD        = self.config['C_ODATA_FIELDS'].strip().split("\n")
         self.i_page       = 0
 
         etl_utils.log(self.logger_id, f'URL: { self.P_URL + "&$top=500&$skip=0" }')
@@ -98,7 +99,7 @@ class ETL_ODATA:
 
         except Exception as e:
             data_qtd[idx] = 0
-            error = str(e)
+            error = "ERROR: " + str(e)
 
 ##---------------------------------------------------------------
 ##---------------------------------------------------------------
@@ -137,7 +138,7 @@ class ETL_ODATA:
         x = 0
         while x < qtd_th-1:
             if data_qtd[x] == 0 and data_qtd[x+1] > 0:
-                raise Exception("Error: possible COREDUMP_001")
+                raise Exception("ERROR: possible COREDUMP_001")
             x = x+1
 
         return data

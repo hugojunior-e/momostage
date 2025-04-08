@@ -7,62 +7,23 @@
 	<link rel="StyleSheet" href="/static/styles/tree.css" type="text/css">
 
     <script>
-        var job_name      = '{{job_name}}';
-        var job_pars      = '{{job_pars}}';
-        var folders_name  = '{{folders_name}}';
+        var job_name          = '{{job_name}}';
+        var job_pars          = '{{job_pars}}';
+        var job_folders_name  = '{{job_folders_name}}';
         var g_objeto;
 
 
 
-        function js_config_job_sh(opt) {
-            if (opt == 1) {
-                document.all.C_JOB_SH_BEFORE.value = document.all.C_JOB_SH_BEFORE.attributes['VALOR'];
-                document.all.C_JOB_SH_AFTER.value  = document.all.C_JOB_SH_AFTER.attributes['VALOR'];
-                document.all.id_job_sh.style.display = 'block';
-            } else{
-                document.all.C_JOB_SH_BEFORE.attributes['VALOR'] = document.all.C_JOB_SH_BEFORE.value;
-                document.all.C_JOB_SH_AFTER.attributes['VALOR']  = document.all.C_JOB_SH_AFTER.value;
-                document.all.id_job_sh.style.display = '';
-            }
-        }
+        //#####################################################################################################
+        //
+        //#####################################################################################################
 
-        function js_executar(tipo) {
-            job_pars_salvar = ' ';
-            if (tipo == 1) {
-                parametros = job_pars.trim().split("/");
-                for (i = 0; i < parametros.length; i++) {
-                    if ( parametros[i] != '' ) {
-                        job_pars_salvar = job_pars_salvar + ' -param ' + parametros[i] + '="' + document.getElementById('id_parametro_run_' + parametros[i]).value + '"';
-                    }
-                }                
-            }
 
-            if ( confirm("Can execute?" + job_pars_salvar ) ) {
-                $.ajax({url:"/job_execute",type:"POST",data:{"job_name":job_name, "job_pars_salvar":job_pars_salvar}, success:function(forms){
-                    alert(forms);
-                }});
-            }            
-        }
 
-        function js_executar_parametros() {
-            parametros = job_pars.trim().split("/");
-            if (parametros.length == 0) {
-                js_executar(0);
-            } else {
-                document.all.id_job_run.style.display = 'block';
-                job_table  = '  ';
-                for (i = 0; i < parametros.length; i++) {
-                    if ( parametros[i] != '' ) {
-                        job_table = job_table + "<tr><td>" + parametros[i] +"</td><td><input type=text id=id_parametro_run_" + parametros[i]+ "></td></tr>";
-                    }
-                }
-                job_table = job_table + "<tr><td colspan=2><input type=button value=Execute onClick=js_executar(1)></td></tr>";
-                document.all.tabela_id_job_run.innerHTML = job_table;
-            }
-        }
+
+
 
         function js_log_by_id() {
-            document.all.id_view_log.style.display = document.all.id_view_log.style.display == 'block' ? 'hidden' : 'block';
             $.ajax({url:"/job_logger",type:"POST",data:{"job_logger_id":document.all.id_logger_job_id.value}, success:function(a){
                 document.all.id_view_log_text.innerHTML = a;
             }});
@@ -88,60 +49,38 @@
 
 
 
-
-
-
-        //--------------------------------------------------------------
-        // action com os jobs
-        //--------------------------------------------------------------
-
-        function js_job_load() {
-            dados = { 
-                "job_name":job_name, 
-                "job_components":g_components.join(",")
-            };
-
-            $.ajax({ url:"/job_load", type:"POST",data:dados, success:function(forms){
-
-                fill_combo(document.all.C_BOTO3_BUCKET   , forms.CBO_BOTO3)
-                fill_combo(document.all.P_NEWJOB_PROJECT , forms.CBO_PROJETOS)
-                fill_combo(document.all.C_SQL_DB         , forms.CBO_DATABASES)
-                fill_combo(document.all.C_ODATA_AUTH     , forms.CBO_AUTHS_SAP)
-
-                if (job_name == 'newjob') {
-                    document.all.id_tabela.innerHTML = g_novo_job;  
-                    return;    
-                }
-                
-                document.all.id_tabela.innerHTML = forms.JOB;
-
-
-                Object.entries(forms).forEach(([key, value]) => {
-                        if (key.startsWith("COMP")) {
-                            info = key.split(".");
-                            document.getElementById(info[0]).attributes[info[1]] = value;
-                        }
-
-                        if (key.startsWith("CONF")) {
-                            info = key.split(".");
-                            document.getElementById(info[1]).value               = value;
-                            document.getElementById(info[1]).attributes['VALOR'] = value;
-                        }                        
-                    });
-
-            }});            
+        function js_job_config_sh(opt) {
+                document.all.id_job_sh.style.display = (opt == 1) ? 'block' : '';
         }
 
+
+        function js_job_execute() {
+            job_pars_salvar = ' ';
+            parametros       = job_pars.trim().split("/");
+            if (parametros.length > 0) {
+                for (i = 0; i < parametros.length; i++) {
+                    if ( parametros[i] != '' ) {
+                        job_pars_salvar = job_pars_salvar + ' -param ' + parametros[i] + '="' + document.getElementById('id_parametro_run_' + parametros[i]).value + '"';
+                    }
+                }                
+            }
+
+            if ( confirm("Can execute?" + job_pars_salvar ) ) {
+                $.ajax({url:"/job_execute",type:"POST",data:{"job_name":job_name, "job_pars_salvar":job_pars_salvar}, success:function(forms){
+                    alert(forms);
+                }});
+            }            
+        }
 
 
         function js_job_save_new() {
-            job_name        = document.all.P_NEWJOB_NAME.value;
-            folders_name    = document.all.P_NEWJOB_PROJECT.value + "|" + document.all.P_NEWJOB_FOLDER.value;
+            job_name         = document.all.P_NEWJOB_NAME.value;
+            job_folders_name = document.all.P_NEWJOB_PROJECT.value + "|" + document.all.P_NEWJOB_FOLDER.value;
             document.all.id_save_job_parameters.style.display = '';
             setTitles();
         }
-
-
+        
+        
 
 
         function js_job_save() {
@@ -152,20 +91,19 @@
                 return;
             }
 
-            data = {"job_name"        : job_name, 
-                    "job_count"       : document.all.id_tabela.rows.length, 
-                    "job_components"  : g_components.join(","),
-                    "folders_name"    : folders_name,
-                    "C_JOB_SH_BEFORE" : document.all.C_JOB_SH_BEFORE.attributes['VALOR'],
-                    "C_JOB_SH_AFTER"  : document.all.C_JOB_SH_AFTER.attributes['VALOR'] 
+            data = {"job_name"         : job_name, 
+                    "job_components"   : g_components.join(","),
+                    "job_folders_name" : job_folders_name,
+                    "C_JOB_SH_BEFORE"  : document.all.C_JOB_SH_BEFORE.value,
+                    "C_JOB_SH_AFTER"   : document.all.C_JOB_SH_AFTER.value,
+                    "TRANSFORM_DATA"   : document.all.TRANSFORM_DATA.value,
+                    "TRANSFORM_FILTER" : document.all.TRANSFORM_FILTER.value,
+                    "TRANSFORM_LOOKUPS": document.all.TRANSFORM_LOOKUPS.value
             };
 
-            for (ii =0; ii < document.all.id_tabela.rows.length; ii++) {
-                data_populate(data, g_transform , ii, 'id_transf');
-                data_populate(data, ['DATASETS']  , ii, 'id_dataset' , -1);
-                data_populate(data, g_components, ii, 'id_origin'  ,  0, "ORIG_");
-                data_populate(data, g_components, ii, 'id_target'  ,  0, "TARGET_");
-            }
+            data_populate(data, ['DATASETS'], 'id_dataset');
+            data_populate(data, g_components, 'id_origin', "ORIG_");
+            data_populate(data, g_components, 'id_target', "TARGET_");
 
             $.ajax({url:"/job_save",type:"POST",data:data, success:function(forms){
                 alert(forms);
@@ -173,12 +111,55 @@
         }
 
 
-        
-        //--------------------------------------------------------------
-        // action com os componentes
-        //--------------------------------------------------------------
+        function js_job_load() {
+            if (job_name == 'newjob') {
+                    return;    
+            }
 
+            dados = { 
+                "job_name":job_name, 
+                "job_components":g_components.join(",")
+            };
+
+            $.ajax({ url:"/job_load", type:"POST",data:dados, success:function(forms){
+                document.all.id_origin.innerHTML     = forms.JOB['origem'];
+                document.all.id_transf.innerHTML     = forms.JOB['transform'];
+                document.all.id_target.innerHTML     = forms.JOB['destino'];
+                document.all.id_dataset.innerHTML    = forms.JOB['dataset'];
+
+                document.all.TRANSFORM_DATA.value    = forms.TRANSFORM_DATA;
+                document.all.TRANSFORM_FILTER.value  = forms.TRANSFORM_FILTER;
+                document.all.TRANSFORM_LOOKUPS.value = forms.TRANSFORM_LOOKUPS;
+                document.all.C_JOB_SH_AFTER.value    = forms.C_JOB_SH_AFTER;
+                document.all.C_JOB_SH_BEFORE.value   = forms.C_JOB_SH_BEFORE;
+
+                Object.entries(forms).forEach(([key, value]) => {
+                        if (key.startsWith("COMP")) {
+                            info = key.split(".");
+                            document.getElementById(info[0]).attributes[info[1]] = value;
+                        }
+                    });
+
+            }});            
+        }
         
+        
+
+
+
+        function jsComponentSave() {
+            local     = g_objeto.attributes['local'].value;
+            type      = g_objeto.attributes['type_obj'].value;
+            nome      = document.getElementById("C_" + type.toUpperCase() + "_NAME" );
+
+            g_objeto.attributes['C_NAME'] = ( nome != null ) ? nome.value : "";
+            g_objeto.attributes['C_TYPE'] = type;
+            data_put(g_components, g_objeto);
+            g_objeto.parentElement.getElementsByTagName("span")[0].innerHTML = g_objeto.attributes['C_NAME'];
+            document.getElementById('id_' + type + '_edit').style.display  = 'none';
+        }   
+
+
         function jsComponentAction(obj, act) {
             g_objeto  = obj.parentElement.parentElement.getElementsByTagName('input')[0]
             local     = g_objeto.attributes['local'].value;
@@ -199,7 +180,6 @@
                 if ( nome != null )
                   nome.value = g_objeto.attributes['C_NAME'] || 'name_comp';
 
-                data_get(g_objeto.attributes, g_transform  , local);
                 data_get(g_objeto.attributes, g_components , local);
             
             } else {
@@ -209,28 +189,8 @@
 
 
 
-
-
-        function jsComponentSave() {
-            local     = g_objeto.attributes['local'].value;
-            type      = g_objeto.attributes['type_obj'].value;
-            document.getElementById('id_' + type + '_edit').style.display  = 'none';
-            
-            nome = document.getElementById("C_" + type.toUpperCase() + "_NAME" );
-            if ( nome != null )
-                g_objeto.attributes['C_NAME'] = nome.value;
-
-            g_objeto.attributes['C_TYPE']  = type;
-            data_put(g_components, g_objeto);
-            data_put(g_transform , g_objeto);
-            g_objeto.parentElement.getElementsByTagName("span")[0].innerHTML = g_objeto.attributes['C_NAME'];
-        }        
-
-
-
         function jsComponentActionAdd(obj, local) {
-            menu  = '<div class="dropdown-content"><a href="#" onClick="jsComponentAction(this, 1)">Edit</a><a href="#" onClick="jsComponentAction(this, 2)">Remove</a></div>';
-            elems = document.getElementById('id_' + local + '_0').getElementsByTagName('input');
+            elems = document.getElementById('id_' + local).getElementsByTagName('input');
 
             if ( local == "origin" && elems.length > 0) {
                 alert("Just 1 input permit.");
@@ -242,15 +202,13 @@
                 return;
             }            
 
+            menu           = '<div class="dropdown-content"><a href="#" onClick="jsComponentAction(this, 1)">Edit</a><a href="#" onClick="jsComponentAction(this, 2)">Remove</a></div>';
             ooo            = obj.parentElement.parentElement.getElementsByTagName('input')[0];
             txt            = '<input local="' + local + '" class=dropbtn type=image type_obj="' + ooo.attributes['type_obj'].value + '" src="' + ooo.src + '">';
             node           = document.createElement("div");
             node.className = "dropdown";
             node.innerHTML = txt + menu + "<br><span></span>";
-            document.getElementById('id_' + local + '_0').appendChild(node);
-            document.getElementById('id_' + local + '_0').appendChild(document.createElement("br"));
-            document.getElementById('id_' + local + '_0').appendChild(document.createElement("br"));
-            
+            document.getElementById('id_' + local).appendChild(node);
         }
 
     </script>
@@ -261,12 +219,15 @@
 
 <body>
     <div class="menu">
-        <input type="button" class="botao" onclick="js_job_save()"            value="Save">
-        <input type="button" class="botao" onclick="js_log_lotes()"           value="View Log">
-        <input type="button" class="botao" onclick="js_executar_parametros()" value="Run">
-        <input type="button" class="botao" onclick="js_config_job_sh(1)"      value="Config Job Sh">
+        <input type="button" class="botao" value="Save"          onclick="js_job_save()">
+        <input type="button" class="botao" value="View Log"      onclick="js_log_lotes()">
+        <input type="button" class="botao" value="Run"           onclick="document.all.id_job_run.style.display = 'block';">
+        <input type="button" class="botao" value="Config Job Sh" onclick="js_job_config_sh(1)">
         <span id="id_title_page"></span>
     </div>
+
+
+
 
     <div class="content">
         <div class="column1" align=center>
@@ -277,12 +238,18 @@
             <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer {{menu3}} </div><br><br>
             <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) {{menu1}}     </div><br><br>
             <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML {{menu1}}         </div><br><br>
-
         </div>
 
 
         <div class="column2">
-            <table class="table_job" width=100%  height="100%" id="id_tabela"></table>                
+            <table class="table_job" width=100%  height="100%" id="id_tabela">
+                <tr>
+                    <td align=center width="300" id="id_origin"></td>
+                    <td align=center width="300" id="id_transf"></td>
+                    <td align=center width="300" id="id_target"></td>
+                    <td align=center             id="id_dataset"></td>
+                </tr>
+            </table>                
         </div>
     </div>
 
@@ -370,17 +337,31 @@
     <div id="id_boto3_edit" class="itools_modal">
         <div class="itools_modal_content">
         <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
-        <h2>OData Editor</h2>
+        <h2>S3 Editor</h2>
             <table >
                 <tr><td>Name</td><td> <input type="text" id="C_BOTO3_NAME"></td> </tr>
                 <tr><td>Select Bucket </td><td><select id="C_BOTO3_BUCKET"></select>   </td> </tr>
                 <tr><td>Remote FileName</td><td><input type=text id="C_BOTO3_FILENAME"></td> </tr>
                 <tr><td>Field Delimitter</td><td><input type=text id="C_BOTO3_FD"></td> </tr>
                 <tr><td>Fields </td><td> <textarea id="C_BOTO3_FIELDS" rows="10"></textarea></td> </tr>
+
+                <tr>
+                    <td>Format Data</td>
+                    <td>
+                        <select id="C_BOTO3_FORMAT">
+                            <option value="txt">txt</option>
+                            <option value="txt_gzip">txt compressed</option>
+                            <option value="pqt">parquet</option>
+                        </select>   
+                    </td>
+                </tr>
+
                 <tr><td colspan="2"><input type="button" value="Save" onclick="jsComponentSave()"></td> </tr>
             </table>
         </div>  
     </div>    
+
+
 
     <div id="id_xml_edit" class="itools_modal">
         <div class="itools_modal_content">
@@ -440,14 +421,12 @@
         </h2>
             <table >
                 <tr><td>Project</td><td><select id="P_NEWJOB_PROJECT"></select></td> </tr>
-                <tr><td>Folder</td><td><input type="text" id="P_NEWJOB_FOLDER"></td> </tr>
+                <tr><td>Folder</td><td><input type="text" id="P_NEWJOB_FOLDER" style="text-transform: uppercase;"></td> </tr>
                 <tr><td>Job Name</td><td><input type="text" id="P_NEWJOB_NAME"></td></tr>
                 <tr><td colspan="2"><input type="button" value="Save" onclick="js_job_save_new()"></td> </tr>
             </table>
         </div>  
     </div> 
-
-
 
 
 
@@ -458,7 +437,7 @@
             <table >
                 <tr><td>Before</td><td><textarea id="C_JOB_SH_BEFORE" rows="5" cols="80"></textarea></td> </tr>
                 <tr><td>After</td><td><textarea id="C_JOB_SH_AFTER" rows="5" cols="80"></textarea></td> </tr>
-                <tr><td colspan="2"><input type="button" value="Save" onclick="js_config_job_sh(2)"></td> </tr>
+                <tr><td colspan="2"><input type="button" value="Save" onclick="js_job_config_sh(2)"></td> </tr>
             </table>
         </div>  
     </div> 
@@ -473,14 +452,30 @@
                 <tbody id="tabela_id_job_run">
                 </tbody>
             </table>
+            <hr>
+            <input type=button value=Execute onClick=js_job_execute()>
         </div>  
     </div>     
 
 
 
     <script> 
+        fill_combo(document.all.C_BOTO3_BUCKET   , '{{CBO_BOTO3}}'    )
+        fill_combo(document.all.P_NEWJOB_PROJECT , '{{CBO_PROJETOS}}' )
+        fill_combo(document.all.C_SQL_DB         , '{{CBO_DATABASES}}')
+        fill_combo(document.all.C_ODATA_AUTH     , '{{CBO_AUTHS_SAP}}')        
+
         js_job_load(); 
         setTitles();
+
+        parametros = job_pars.trim().split("/");
+        job_table  = '  ';
+        for (i = 0; i < parametros.length; i++) {
+            if ( parametros[i] != '' ) {
+                job_table = job_table + "<tr><td>" + parametros[i] +"</td><td><input type=text id=id_parametro_run_" + parametros[i]+ "></td></tr>";
+            }
+        }
+        document.all.tabela_id_job_run.innerHTML = job_table;
     </script>
 
 </body>

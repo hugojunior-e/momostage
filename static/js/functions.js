@@ -1,19 +1,10 @@
-g_novo_job  = '<tr><td align=center width="300" id="id_origin_0"  ></td>'+
-                  '<td align=center width="300" id="id_transf_0"  ></td>'+
-                  '<td align=center width="300" id="id_target_0"  ></td>'+
-                  '<td align=center             id="id_dataset_0" ></td></tr>';
-
-
-
-g_transform = ['TRANSFORM_DATA','TRANSFORM_FILTER','TRANSFORM_LOOKUPS'];
-
 g_components = [
     'C_TYPE','C_NAME',
     'C_SQL_DB','C_SQL','C_SQL_AFTER','C_SQL_BEFORE','C_SQL_FIELDS/target','C_SQL_TYPE/target','C_SQL_AUTO/target',
     'C_FILENAME','C_FILENAME_FD','C_FILENAME_FIELDS/target','C_FILENAME_FILE_REQUIRED/orig',
     'C_ODATA_TH_COUNT','C_ODATA_TH_SIZE','C_ODATA_URL','C_ODATA_AUTH','C_ODATA_FIELDS',
     'C_DATASET','C_DATASET_FIELDS',
-    'C_BOTO3_BUCKET','C_BOTO3_FILENAME','C_BOTO3_FD','C_BOTO3_FIELDS',
+    'C_BOTO3_BUCKET','C_BOTO3_FILENAME','C_BOTO3_FD','C_BOTO3_FIELDS','C_BOTO3_FORMAT',
     'C_XML_FILENAME','C_XML_FIELDS','C_XML_FILE_REQUIRED/orig'
 ];
 
@@ -41,40 +32,37 @@ function setTitles() {
 }
 
 
-function getatt(id, idx, attname) {
-    elemento = document.getElementById(id);
-    if (elemento == null)
-      return "";
 
-    minputs = elemento.getElementsByTagName("input")
+function data_populate(data, data_fields, id_data, idx_header="") {
+    elemento = document.getElementById(id_data);
 
-    if (idx == -1) {
-        ret = ""
-        for (i=0 ; i < minputs.length; i++)
-          ret = ret + "\n" + minputs[i].attributes[attname]
-        return ret.trim();
-    }
-    
-    if ( idx >= minputs.length )
-        return "";
-
-    return minputs[idx].attributes[attname];
-}
-
-
-
-function data_populate(data, data_fields, index, id_data, idx_loop=0, idx_header="") {
-    v_id = id_data + '_' + ii;
-    if ( document.getElementById(v_id) != null ) {
+    if ( elemento != null ) {
+        lista_inputs = elemento.getElementsByTagName("input")
+            
         data_fields.forEach(e => { 
             xx  = e.split("/");
             tag = xx[0];            
-            data[idx_header + tag + "_" + index]   = getatt(v_id, idx_loop , tag);
+
+            if (id_data == "id_dataset") {
+                ret = ""
+                for (i=0 ; i < lista_inputs.length; i++)
+                  ret = ret + "\n" + lista_inputs[i].attributes[attname]
+
+                data[idx_header + tag] =  ret.trim();
+
+            } else{
+                for (i=0 ; i < lista_inputs.length; i++) {
+                    data[idx_header + "C" + (id_data == "id_target" ? String(i+1) : "") + tag.substring(1) ]   = lista_inputs[i].attributes[tag];
+                }
+            }
+
+            
         });    
     }
 }
 
 
+// pega o atributo e "poe" no valor
 function data_get(data, data_fields, local) {
     data_fields.forEach(e => { 
         xx  = e.split("/");
@@ -99,6 +87,7 @@ function data_get(data, data_fields, local) {
 }
 
 
+// pega o valor e "poe" no atributo
 function data_put(list_obj, g_objeto) {
     list_obj.forEach(e => { 
         dados = e.split("/");
