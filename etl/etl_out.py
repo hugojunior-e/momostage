@@ -99,7 +99,7 @@ class ETL_OUT:
         prefix[-1]     = file_orig.split( os.path.sep )[-1]
         file_remote    = "/".join( prefix )
 
-        s3.upload_file( file_orig , self.boto3_bucket_data['bucket'], "temp_" + file_remote )
+        s3.upload_file( file_orig , self.boto3_bucket_data['bucket'], file_remote )
         etl_utils.log(self.logger_id, f"Uploaded File {file_orig} -> {file_remote} ")
 
         if self.temp_file_operation == "1":
