@@ -3,22 +3,28 @@ import etl_hash
 import etl_in
 import etl_out
 import multiprocessing
+import threading
 import os
 import gc
+import json
+import sys
+import time
 from datetime import datetime
 
 
 class ETL:
-  def __init__(self, job_name, lote_id):
+  def __init__(self, job_name, batch_id):
     self.job_name        = job_name
-    self.lote_id         = lote_id
+    self.batch_id        = batch_id
     self.logger_id       = etl_utils.get_logger_id()
     self.transformations = []
     self.config_orig     = {}
     self.config_target   = {}
 
-    etl_utils.LOG_MAP[self.logger_id] = {"job_name":job_name, "lote_id":lote_id, "log_seq":0}
 
+    etl_utils.LOG_MAP[self.logger_id] = { "job_name":job_name, "batch_id":batch_id }
+
+    
 
 
   #=======================================================================================================
@@ -129,7 +135,8 @@ class ETL:
       
     else:
       l_thread      = []
-      l_thread_list = multiprocessing.Manager().list()
+      manager       = multiprocessing.Manager()
+      l_thread_list = manager.list()
 
       for i in range(qtd_mod):
         etl_utils.log(self.logger_id,  f"Threading Instance {i}" )
@@ -137,17 +144,24 @@ class ETL:
         l_thread_list.append( [1,'-']  )
 
         t        = multiprocessing.Process(target=self.run_job_thread, args=(i,qtd_mod,l_thread_list,) )
+        t.index  = i
         l_thread.append(t)
         t.start()
 
-      for i, x in enumerate(l_thread):
-        x.join()
-        s,m = l_thread_list[i]
-
-        etl_utils.log(self.logger_id,  f"Thread: {i} Status: {s}" )
-        if s != 0:
-          raise Exception(m)      
-    
+      while len(l_thread) > 0:
+        for x in l_thread:
+          if x.is_alive() == False:
+            x.join()
+            s,m = l_thread_list[ x.index ]
+            etl_utils.log(self.logger_id,  f"Thread: { x.index } Status: {s} {m}" )
+            l_thread.remove(x)
+            if s != 0:
+              l_thread.clear()
+              raise Exception(m)      
+        time.sleep(3)
+        
+      manager.shutdown()
+      
     etl_utils.log(self.logger_id, "Executing OUT.after" )
     for idx in range( self.config_target['C_OUT_COUNT'] ):
       ou = etl_out.ETL_OUT(idx, self.config_target, -1,logger_id=self.logger_id)
@@ -160,46 +174,74 @@ class ETL:
 
 
 
-  def apply_filter(self, parameter_job, parameter_text):
+  def apply_filter(self, p_job, parameter_text):
     ret   = parameter_text
-    if parameter_job != None:
-        lista = parameter_job[0].split(" ")
-        for idx, l in enumerate(lista):
-          if l == "-param":
-            pname,pvalue = lista[idx+1].replace('"','').split("=")
-            ret   = ret.replace( f"#{pname}#", pvalue)
+    if p_job != None:
+        param_job = p_job[0]
+        if param_job != None:
+          dados = json.loads(param_job)
+          for l in dados:
+            ret  = ret.replace( f"#{ l }#", dados[l] )
     return ret
 
+
+  def apply_jsh(self, commands, opt):
+    try:
+      if commands != None:
+        results = {}
+        exec(commands.read(), results)
+        s_sh = results[ "C_JOB_SH_BEFORE" if opt == "job.start" else "C_JOB_SH_AFTER"  ]
+        l_sh = s_sh.split("\n")
+        for x in l_sh:
+          if x.startswith("#SNOWFLAKE_EXECUTE"):
+            cmd   = x.strip().split(" ")
+            cmd   = " ".join( cmd[1:] )
+            r = etl_utils.execute_on_snowflake(cmd)
+            etl_utils.log(self.logger_id, "Executing on Snow: " + r)
+
+          if x.startswith("#SMS"):
+            cmd   = x.strip().split(" ")
+            phone = cmd[1] 
+            msg   = " ".join( cmd[2:] )
+            r = etl_utils.send_sms(phone, msg)
+            etl_utils.log(self.logger_id, "Sending SMS to " + phone + " " + r.text)
+      return 1
+    except:
+      return 0
+  
 
 
   def run(self):
     dt_ini     = datetime.now()
     status_ret = 0
+    jsh        = ""
+    m          = etl_utils.update_batch_status( self.batch_id , self.job_name  , "E" )
+    etl_utils.log(self.logger_id, m)
 
     try:
       etl_utils.log(self.logger_id, "#")
       etl_utils.log(self.logger_id, "### Preparing Parameters/Configuration")
       etl_utils.log(self.logger_id, "#")
-      etl_utils.log(self.logger_id, f"lote_id= {self.lote_id}")
-      etl_utils.log(self.logger_id, "Loading Params.")
 
-      cur_dw                = etl_utils.local_db().cursor()
-      origin,target,hasheds = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB % (self.job_name) ).fetchone()
-      transforms            = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB_TRANSF % (self.job_name) ).fetchall()
-      
-      parameter_job         = None  #cur_dw.execute( etl_utils.CONSTANT_SQL_JOB_PARAMETERS % (self.lote_id, self.job_name) ).fetchone()
+      cur_dw                     = etl_utils.local_db().cursor()
+      origin,target,hasheds,jsh  = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB % (self.job_name) ).fetchone()
+      transforms                 = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB_TRANSF % (self.job_name) ).fetchall()
+      parameter_job              = cur_dw.execute( etl_utils.CONSTANT_SQL_JOB_BATCH_PARAMETERS % ( self.batch_id  , self.job_name ) ).fetchone()
+
+      etl_utils.log(self.logger_id, "Input Params.")
+      etl_utils.log(self.logger_id, f"sys       = {sys.argv}")
+      etl_utils.log(self.logger_id, f"batch_id  = {self.batch_id}")
+      etl_utils.log(self.logger_id, f"logger_id = {self.logger_id}")
+      etl_utils.log(self.logger_id, f"params    = {parameter_job}")
+      etl_utils.log(self.logger_id, f"job_sh    = { '' if jsh == None else jsh }")
 
       c_origin              = self.apply_filter( parameter_job, origin.read() )
       c_target              = self.apply_filter( parameter_job, target.read() )
       self.c_hasheds        = self.apply_filter( parameter_job, "" if hasheds == None else hasheds.read() )
 
-      if parameter_job != None:
-          lista = parameter_job[0].split(" ")
-          for idx, l in enumerate(lista):
-            if l == "-param":
-              pname,pvalue = lista[idx+1].replace('"','').split("=")
-              etl_utils.log(self.logger_id, f"{pname} = {pvalue}")
-              
+      etl_utils.log(self.logger_id, "job_def-origin",shortcut="I",logbigdata=c_origin)
+      etl_utils.log(self.logger_id, "job_def-target",shortcut="I",logbigdata=c_target)
+
       etl_utils.log(self.logger_id, "Configuring Params input.")
       exec(c_origin, self.config_orig)
       etl_utils.log(self.logger_id, "Configuring Params output.")
@@ -261,10 +303,18 @@ class ETL:
       etl_utils.log(self.logger_id, "### Starting Execution")
       etl_utils.log(self.logger_id, "#")
 
+      self.apply_jsh(jsh, "job.start")
       self.run_job()
     except Exception as e:
       etl_utils.log(self.logger_id, "ERROR: " + str(e)  )
       status_ret = 1
-    finally:
-      etl_utils.log(self.logger_id, "Time Elapsed: " + etl_utils.diff_date(datetime.now() , dt_ini ) )
-      etl_utils.log(self.logger_id, f"STATUS:{ "OK" if status_ret == 0 else "ERRO"}")
+
+    self.apply_jsh(jsh, "job.end")
+    
+    m = etl_utils.update_batch_status( self.batch_id  , self.job_name , ("F" if status_ret == 0 else "A")  )
+    etl_utils.log(self.logger_id, m )
+    
+    etl_utils.log(self.logger_id, "Time Elapsed: " + etl_utils.diff_date(datetime.now() , dt_ini ) )
+    etl_utils.log(self.logger_id, f"STATUS:{ 'OK' if status_ret == 0 else 'ERRO'}")
+    return status_ret
+    

@@ -1,22 +1,126 @@
 <html>
 
 <head>
-	<title>MoMoStage Designer - Sequences</title>
-    <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
-	<link rel="StyleSheet" href="/static/styles/tree.css" type="text/css">
+	<title>Algar ETL</title>
+	<link rel="StyleSheet" href="/static/styles/style.css" type="text/css">
 	<script type="text/javascript" src="/static/js/functions.js"></script>
+
+	<script>
+		function jsEdit(idx) {
+			tb                             = id_sequences_jobs.querySelectorAll("table")[0];
+			id_sequence_edit.style.display = 'block';
+			id_sequence_edit.rowid         = tb.rows[idx].cells[0].value;
+			SEQ_NAME.value                 = tb.rows[idx].cells[1].innerHTML;
+			JOB_NAME.value                 = tb.rows[idx].cells[2].innerHTML;
+			PARAMETERS.value               = tb.rows[idx].cells[3].value;
+			ORDER_PRI.value                = tb.rows[idx].cells[4].innerHTML;
+			ORDER_SEC.value                = tb.rows[idx].cells[5].innerHTML;
+			FL_ACTIVE.checked              = tb.rows[idx].cells[6].innerHTML == "1";
+		}
+		function jsAdd() {
+			id_sequence_edit.style.display = 'block';
+			id_sequence_edit.rowid         = "-";
+			SEQ_NAME.value                 = '';
+			JOB_NAME.value                 = '';
+			PARAMETERS.value               = '';
+			ORDER_PRI.value                = '';
+			ORDER_SEC.value                = '';
+			FL_ACTIVE.checked              = true;			
+		}
+
+		function jsSave() {
+			dados = {
+				"name"       : "job_sequence_save",
+				"rowid"      : id_sequence_edit.rowid,
+				"SEQ_NAME"   : SEQ_NAME.value,
+				"JOB_NAME"   : JOB_NAME.value,
+				"PARAMETERS" : PARAMETERS.value,
+				"ORDER_PRI"  : ORDER_PRI.value,
+				"ORDER_SEC"  : ORDER_SEC.value,
+				"FL_ACTIVE"  : FL_ACTIVE.checked ? "1" : "0"
+			};
+
+			ajax("/info", dados, function (a) {
+				alert(a.message);
+				jsSequenceDetail(SEQ_NAME.value);
+			}, null);
+		}		
+
+		function jsSequenceDetail(x) {
+			id_sequence_edit.style.display = 'none';
+
+			ajax("/info", { "name": "tablemodel", "sql": "job_sequences.all", "sql_pars": [x] }, function (a) {
+				id_sequences_jobs.innerHTML = a.message;
+				id_sequences_jobs.querySelectorAll("table")[0].className = 'table_detail';
+
+				id_sequences_jobs.querySelectorAll("tr").forEach((e, idx) => {
+					if (idx > 0) {
+						e.cells[0].value      = e.cells[0].innerHTML;
+						e.cells[0].innerHTML  = "<a href=# onclick=jsEdit(" + idx + ") >edit</a>";
+
+						e.cells[3].value      = e.cells[3].innerHTML;
+						e.cells[3].innerHTML  = "[...]";
+					}
+				});
+			}, null);
+		}  		
+	</script>
 </head>
 
 <body>
-	<div class=area>
-		<span class="titulo">Sequences </span><hr>
-		<div id="id_values"></div>
+	<div class="container">
+		<div class="div-esquerda">
+			<div class="area">
+				<span class="titulo">Sequences Availables</span>
+				<hr>
+				<div class="div_pre" id="id_sequences"></div>
+			</div>
+		</div>
+
+		<div class="div-direita">
+			<div class="area">
+				<span class="titulo">Jobs </span>
+				<hr>
+				<div class="div_pre" id="id_sequences_jobs"></div>
+				<button onclick="jsAdd()">Add</button>
+			</div>
+		</div>
+
 	</div>
 
-    <script>
-        do_result_set("job_list_sequences",[], function(a) {
-			document.all.id_values.innerHTML = a;
-		});
-    </script>
+    <div id="id_sequence_edit" class="itools_modal">
+        <div class="itools_modal_content">
+        <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
+        <h2>Sequence Editor</h2>
+            <table >
+                <tr><td>SEQ_NAME:</td><td><input type="text" id="SEQ_NAME" style="text-transform: uppercase;"></td> </tr>
+                <tr><td>JOB_NAME:</td><td><input type="text" id="JOB_NAME" style="text-transform: uppercase;"></td> </tr>
+                <tr><td>PARAMETERS:</td><td><textarea id="PARAMETERS"></textarea></td> </tr>
+                <tr><td>ORDER_PRI:</td><td><input type="number" id="ORDER_PRI"></td> </tr>
+                <tr><td>ORDER_SEC:</td><td><input type="number" id="ORDER_SEC"></td> </tr>
+                <tr><td>FL_ACTIVE:</td><td><input type="checkbox" id="FL_ACTIVE"></td> </tr>
+                <tr>
+					<td colspan="2" style="display: flex;justify-content: flex-start;">
+						<hr>
+						<button onclick="jsSave()">Save</button> &nbsp;
+					</td> 
+				</tr>
+            </table>
+        </div>  
+    </div>
+
+
+	<script>
+		ajax("/info", { "name": "tablemodel", "sql": "job_sequences", "sql_pars": [] }, function (a) {
+			id_sequences.innerHTML = a.message;
+			id_sequences.querySelectorAll("table")[0].className = 'table_detail';
+			id_sequences.querySelectorAll("tr").forEach((e, idx) => {
+				if (idx > 0)
+					e.cells[0].innerHTML = "<a href=# onclick=jsSequenceDetail('" + e.cells[0].innerHTML + "') >" + e.cells[0].innerHTML + "</a>";
+			});
+		}, null);
+
+	</script>
 </body>
+
 </html>

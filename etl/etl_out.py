@@ -5,6 +5,7 @@ import os
 import sqlite3
 import json
 import boto3
+import sys
 
 class ETL_OUT:
   def __init__(self, idx, config, inst_mod=0,logger_id=0):
@@ -17,7 +18,6 @@ class ETL_OUT:
     self.inst_mod            = inst_mod
     self.logger_id           = logger_id
     self.temp_file_operation = etl_utils.get_param_value('PARAMETERS','TEMP_FILE_OPERATION')
-
 
     #-----------
     if self.value('C_TYPE') == 'sql':
@@ -43,7 +43,7 @@ class ETL_OUT:
       self.boto3_fd          = self.value('C_BOTO3_FD')
       self.boto3_file_list   = []
       self.boto3_bucket_data = json.loads( etl_utils.get_param_value("AUTHS.S3", self.value('C_BOTO3_BUCKET')) )
-      self.boto3_file_local  = self.boto3NewFileName()
+      
 
     #-----------
 
@@ -75,8 +75,8 @@ class ETL_OUT:
     last_name  = self.boto3_filename.split("/")[-1]
     gen_hash   = "gzip" in self.boto3_format
     name       = etl_utils.generate_hash( prefix=last_name , with_hash=gen_hash)
-    if gen_hash == False:
-      self.boto3_file_list.append( name )
+    self.boto3_file_list.append( name )
+    etl_utils.log(self.logger_id, "Generated File: " + name)
     return name
   
   def boto3CheckFileSize(self):
@@ -84,29 +84,30 @@ class ETL_OUT:
     if tamanho > 250:
       if self.fp:
         self.fp.close()
-        self.boto3_file_list.append(self.boto3_file_local)
 
       self.boto3_exists     = False
-      self.boto3_file_local = self.boto3NewFileName()
       self.fp               = None
 
   def boto3SendFiles(self):
+      etl_utils.log(self.logger_id, "Start Upload Files")
       session = boto3.Session(aws_access_key_id=self.boto3_bucket_data['access_key'],aws_secret_access_key=self.boto3_bucket_data['secret_key'])      
       s3      = session.client('s3')
 
       for file_orig in self.boto3_file_list:
-        prefix         = self.boto3_filename.split("/")
-        prefix[-1]     = file_orig.split( os.path.sep )[-1]
-        file_remote    = "/".join( prefix )
+        if os.path.exists(file_orig):
+          prefix         = self.boto3_filename.split("/")
+          prefix[-1]     = file_orig.split( os.path.sep )[-1]
+          file_remote    = "/".join( prefix )
 
-        s3.upload_file( file_orig , self.boto3_bucket_data['bucket'], file_remote )
-        etl_utils.log(self.logger_id, f"Uploaded File {file_orig} -> {file_remote} ")
+          s3.upload_file( file_orig , self.boto3_bucket_data['bucket'], file_remote )
+          etl_utils.log(self.logger_id, f"Uploaded File {file_orig} -> {file_remote} ")
 
-        if self.temp_file_operation == "1":
-          os.remove(file_orig)
-        if self.temp_file_operation == "2":
-          os.rename(file_orig, file_orig + ".done")
-
+          if self.temp_file_operation == "1":
+            os.remove(file_orig)
+          if self.temp_file_operation == "2":
+            os.rename(file_orig, file_orig + ".done")
+        else:
+          etl_utils.log(self.logger_id, f"ERROR(not found) Upload File {file_orig}")
 
   #=======================================================================================================
   #
@@ -131,6 +132,8 @@ class ETL_OUT:
             
     if self.value('C_TYPE') == 'boto3':
       if self.fp == None:
+        self.boto3_file_local  = self.boto3NewFileName()
+
         if "gzip" in self.boto3_format:
           self.fp     = gzip.open(self.boto3_file_local,"wt", newline="", encoding='utf-8')
         else:

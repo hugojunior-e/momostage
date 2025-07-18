@@ -1,51 +1,135 @@
 <html>
 
 <head>
-	<title>MoMoStage Designer - Globals</title>
-    <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
-	<link rel="StyleSheet" href="/static/styles/tree.css" type="text/css">
+	<title>Algar ETL</title>
+	<link rel="StyleSheet" href="/static/styles/style.css" type="text/css">
 	<script type="text/javascript" src="/static/js/functions.js"></script>
 
-    <script>
-		function js_param_value(x) {
-			do_result_set("job_globals.all",[x],function(a){
-				document.all.id_parametros_values.innerHTML = a;
-				(document.all.id_parametros_values.querySelectorAll("table")[0]).style = 'border-collapse: collapse;';
-				document.all.id_parametros_values.querySelectorAll("tr").forEach(e => {
-    				e.style = 'border-bottom: 1pt solid black;'
-				});				
-			});
+	<script>
+		function jsEdit(idx) {
+			tb                            = id_parametros_values.querySelectorAll("table")[0];
+			id_globals_edit.style.display = 'block';
+			id_globals_edit.rowid         = tb.rows[idx].cells[0].value;
+			GROUP_NAME.value              = tb.rows[idx].cells[1].innerHTML;
+			PARAM_NAME.value              = tb.rows[idx].cells[2].innerHTML;
+			PARAM_VALUE.value             = tb.rows[idx].cells[3].value;
+			DESCRIPTION.value             = tb.rows[idx].cells[4].innerHTML;
+		}
+
+		function jsAdd() {
+			id_globals_edit.style.display = 'block';
+			id_globals_edit.rowid         = "-";
+			GROUP_NAME.value              = '';
+			PARAM_NAME.value              = '';
+			PARAM_VALUE.value             = '';	
+			DESCRIPTION.value             = '';	
+		}
+
+		function jsSave() {
+			dados = {
+				"name"        : "job_globals_save",
+				"rowid"       : id_globals_edit.rowid,
+				"GROUP_NAME"  : GROUP_NAME.value,
+				"PARAM_NAME"  : PARAM_NAME.value,
+				"PARAM_VALUE" : PARAM_VALUE.value,
+				"DESCRIPTION" : DESCRIPTION.innerHTML
+			};
+
+			ajax("/info", dados, function (a) {
+				alert(a.message);
+				jsJobGlobalsDetail(GROUP_NAME.value);
+			}, null);
+		}			
+
+		function jsJobGlobalsDetail(x) {
+			id_globals_edit.style.display = 'none';
+
+			ajax("/info", { "name": "tablemodel", "sql": "job_globals.all", "sql_pars": [x] }, function (a) {
+				id_parametros_values.innerHTML = a.message;
+				id_parametros_values.querySelectorAll("table")[0].className = 'table_detail';
+
+				id_parametros_values.querySelectorAll("tr").forEach((e, idx) => {
+					if (idx > 0) {
+						e.cells[0].value = e.cells[0].innerHTML;
+						e.cells[0].innerHTML  = "<a href=# onclick=jsEdit(" + idx + ") >edit</a>";
+
+						e.cells[3].value = e.cells[3].innerHTML.replaceAll("&lt;","<").replaceAll("&gt;",">");
+						e.cells[3].innerHTML = "[...]";
+					}
+				});
+
+			}, null);
 		}        
-    </script>
+	</script>
 </head>
 
 <body>
+	<div class="container">
+		<div class="div-esquerda">
+			<div class="area">
+				<span class="titulo">Parameters Availables</span>
+				<hr>
+				<div class="div_pre" id="id_parametros"></div>
+			</div>
+		</div>
 
-    <div class="content">
-        <div class="column1">
-			<span class="titulo">Parameters Availables</span><hr>
-			<div  id="id_parametros"> </div>
-        </div>
-        <div class="column2" style="overflow: auto">
-			<span class="titulo">Parameters/Values Configured </span><hr>
-			<div id="id_parametros_values"></div>
-        </div>
-    </div>
+		<div class="div-direita">
+			<div class="area">
+				<span class="titulo">Parameters/Values Configured </span>
+				<hr>
+				<div class="div_pre" id="id_parametros_values"></div>
+				<button onclick="jsAdd()">Add</button>
+			</div>
+		</div>
+
+	</div>
+
+	<div id="id_globals_edit" class="itools_modal">
+		<div class="itools_modal_content">
+			<span class="itools_modal_close"
+				onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
+			<h2>Parameters Editor</h2>
+			<table>
+				<tr>
+					<td>GROUP_NAME:</td>
+					<td><input type="text" id="GROUP_NAME" style="text-transform: uppercase;"></td>
+				</tr>
+				<tr>
+					<td>PARAM_NAME:</td>
+					<td><input type="text" id="PARAM_NAME" style="text-transform: uppercase;"></td>
+				</tr>
+				<tr>
+					<td>PARAM_VALUE:</td>
+					<td><textarea id="PARAM_VALUE"></textarea></td>
+				</tr>
+
+				<tr>
+					<td>DESCRIPTION:</td>
+					<td><input type="text" id="DESCRIPTION"></td>
+				</tr>
+				
+				<tr>
+					<td colspan="2" style="display: flex;justify-content: flex-start;">
+						<hr>
+						<button onclick="jsSave()">Save</button> &nbsp;
+					</td>
+				</tr>
+			</table>
+		</div>
+	</div>
 
 
-
-
-    <script>
-        do_result_set("job_globals.group_name", [], function(a) {
-			document.all.id_parametros.innerHTML = a;
-			document.all.id_parametros.querySelectorAll("td").forEach(e => {
-				if ( e.id == '_')
-				  e.innerHTML = e.innerHTML + "<hr>";
-				else
-    			  e.innerHTML = "<a href=# onclick=js_param_value('" + e.innerHTML + "') >" + e.innerHTML + "</a><hr>";
+	<script>
+		ajax("/info", { "name": "tablemodel", "sql": "job_globals.group_name", "sql_pars": [] }, function (a) {
+			id_parametros.innerHTML = a.message;
+			id_parametros.querySelectorAll("table")[0].className = 'table_detail';
+			id_parametros.querySelectorAll("tr").forEach((e, idx) => {
+				if (idx > 0)
+					e.cells[0].innerHTML = "<a href=# onclick=jsJobGlobalsDetail('" + e.cells[0].innerHTML + "') >" + e.cells[0].innerHTML + "</a>";
 			});
-		});		
-        
-    </script>
+		}, null);
+
+	</script>
 </body>
+
 </html>

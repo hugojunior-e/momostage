@@ -1,71 +1,120 @@
-
-
-
 <html>
+
 <head>
-	<title>MoMoStage Designer</title>
-	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
-	<link rel="StyleSheet" href="/static/styles/tree.css" type="text/css">
+	<title>Algar ETL</title>
+	<link rel="StyleSheet" href="/static/styles/style.css" type="text/css">
+	<script type="text/javascript" src="/static/js/functions.js"></script>
 	<script type="text/javascript" src="/static/js/tree.js"></script>
-	<script src="https://code.jquery.com/jquery-1.10.2.js"></script>
 
 	<script type="text/javascript">
-		{{ load_repository }}
+		function jsLogByBatchId(p_batch_id) {
+			ajax("/info", { "name":"log_batch_id", "batch_id": p_batch_id }, function (ret) {
+				a = window.open('');
+				a.document.body.innerHTML = "<pre>" + ret.message + "</pre>";
+			}, null);
+		}
 
+		function jsShowPidDetail(pid) {
+			const elementos = document.querySelectorAll('[id^="pid' + pid + '"]');
+			elementos.forEach(el => {
+				el.style.display = el.style.display == 'none' ? '' : 'none';
+			});
+		}
 
 		function list_process_running() {
-			$.ajax({url:"/status_cpu_mem",type:"POST",data:{}, success:function(ret){
-				document.all.id_status_cpu_mem.innerHTML = ret;
-			}});
 
-			$.ajax({url:"/list_process_running",type:"POST",data:{}, success:function(ret){
-				document.all.id_process_running.innerHTML = ret;
-			}});
+			ajax("/info", { "name": "memory", "sql_pars": [] }, function (a) {
+				document.all.id_memory.innerHTML = a.message;
+				document.all.id_memory.querySelectorAll("table")[0].className = 'table_detail';
+			}, null);
 
-			setTimeout("list_process_running()",30000);
-		}		
-	</SCRIPT>	
+			ajax("/info", { "name": "process_running", "sql_pars": [] }, function (a) {
+				document.all.id_process_running.innerHTML = a.message;
+				document.all.id_process_running.querySelectorAll("table")[0].className = 'table_detail';
+			}, null);
+
+			ajax("/info", { "name": "process_aborted", "sql_pars": [] }, function (a) {
+				document.all.id_process_aborted.innerHTML = a.message;
+				document.getElementById('id_table_proc').className = 'table_detail';
+				document.getElementById('id_table_proc').querySelectorAll("tr").forEach(row => {
+					if (row.cells[5].innerHTML != "ALGARSCHEDULER") {
+						row.cells[1].innerHTML = '<a href="/designer?job_name=' + row.cells[1].innerHTML + '" target=__blank>' + row.cells[1].innerHTML + '</a>';
+					}
+
+					row.cells[2].innerHTML = '<a href=# onclick="jsLogByBatchId(' + row.cells[2].innerHTML + ')">' + row.cells[2].innerHTML + '</a>';
+					if (row.cells[0].innerHTML == "F") row.cells[0].innerHTML = "🟢";
+					if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = "🟥";
+					if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = "🔷";
+					if (row.cells[0].innerHTML == "-") row.cells[0].innerHTML = "❌";
+				})
+			}, null);
+		}
+
+
+		function jsClearAppTemp() {
+			alert("em construção");
+		}
+
+
+		function jsKillProcess(pid) {
+			if (confirm("Are you sure you want to kill the process " + pid + "?")) {
+				ajax("/info", { "name": "kill_process", "pid": pid }, function (a) {
+					alert(a.message);
+				}, null);
+			}
+
+		}
+	</SCRIPT>
 </head>
-<body>
-    <div class="menu">
-		<input type=button class=botao onclick="window.location.reload()" value="Reload Repository">
-		<input type=button class=botao onclick="window.open('/newjob...')" value="Create new Job">
-		<input type=button class=botao onclick="window.open('/globals')" value="Parameters Globals">
-		<input type=button class=botao onclick="window.open('/sequencejobs')" value="Sequence Jobs">
-    </div>
-    <div class="content">
-        <div class="column1">
 
+<body>
+	<div class="menu">
+		<button onclick="window.location.reload()">Reload Repository</button> &nbsp;
+		<button onclick="window.open('/designer?job_name=newjob')">Create new Job</button> &nbsp;
+		<button onclick="window.open('/globals')">Parameters Globals</button> &nbsp;
+		<button onclick="window.open('/sequences')">Sequences</button> &nbsp;
+
+		<div id="id_title_page" class="titles_toolbar" style="cursor: pointer" onclick="window.open('/logout')">Logout:
+			{{ login }}</div>
+	</div>
+
+
+	<div class="container">
+		<div class="div-esquerda">
 			<div class="area">
 				<script type="text/javascript">
-					createTree(Tree);
+					const csvData = `{{treeview}}`.trim();
+					const treeNodes = parseCsvToTreeArray(csvData);
+					createTree(treeNodes);
 				</script>
 			</div>
+		</div>
 
-			<div class="footer">
-				<img src="/static/img/mm.png">
-			</div>
-
-
-        </div>
-        <div class="column2">
-
-			<div class="area" >
-				<span class="titulo">CPU/Memory Monitor </span>
-				<div><pre id="id_status_cpu_mem" style="font-size: 12;"></pre></div>
-			</div>
+		<div class="div-direita">
+			<div class="area">
+				<span class="titulo">Memory|Disk|CPU|IO Monitor </span>
+				<div class="div_pre" id="id_memory"></div>
+				<br>
 		
-			<div class="area" >
 				<span class="titulo">Process Running Now </span>
-				<div><pre id="id_process_running" style="font-size: 12;"></pre></div>
+				<div class="div_pre" id="id_process_running"></div>
+				<br>
+
+				<span class="titulo">Last Aborted Process</span> 🟢 - OK | 🟥 - ABORTED | 🔷 - IN EXECUTION | ❌ - KILLED
+				<div class="div_pre" id="id_process_aborted"></div>
 			</div>
 
-        </div>
-    </div>
+		</div>
+
+	</div>
+
+
+
 
 	<script>
 		list_process_running();
+		setInterval(list_process_running, 30000);
 	</script>
-
 </body>
+
 </html>

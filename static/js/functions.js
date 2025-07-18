@@ -8,11 +8,32 @@ g_components = [
     'C_XML_FILENAME','C_XML_FIELDS','C_XML_FILE_REQUIRED/orig'
 ];
 
-
-function do_result_set(sql_name,sql_pars, ff) {
-    $.ajax({url:"/get_sql_values",type:"POST",data:{"sql":sql_name,"sql_pars":sql_pars.join("|")}, success:function(ret){
-        ff(ret);
-    }});
+function ajax(url, dataBody, jsAction, jsError) {
+    fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams(dataBody)
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Erro na requisição: " + response.statusText);
+            }
+            return response.json();
+        })
+        .then(a => {
+            if (jsAction !== null) {
+                jsAction(a);
+            }
+        })
+        .catch(error => {
+            if (jsError !== null) {
+                jsError(error);
+            } else {
+                alert("Erro ao executar consulta." + error);
+            }
+        });
 }
 
 function fill_combo(cbo, data_cbo) {
@@ -27,8 +48,8 @@ function fill_combo(cbo, data_cbo) {
 
 
 function setTitles() {
-    document.title  = 'MoMoStage Designer - ' + job_name;
-    document.all.id_title_page.innerHTML = job_name;
+    document.title  = 'Algar ETL - ' + document.all.P_NEWJOB_NAME.value;
+    document.all.id_title_page.innerHTML = document.all.P_NEWJOB_NAME.value;
 }
 
 

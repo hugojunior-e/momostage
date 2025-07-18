@@ -38,7 +38,7 @@ function createTree(arrName, startNode, openNode) {
 		if (startNode !=0) {
 			var nodeValues = nodes[getArrayId(startNode)].split("|");
 			document.write("<a href=\"" + nodeValues[3] + "\" onmouseover=\"window.status='" + nodeValues[2] + "';return true;\" onmouseout=\"window.status=' ';return true;\"><img src=\"/static/img/folderopen.gif\" align=\"absbottom\" alt=\"\" />" + nodeValues[2] + "</a><br />");
-		} else document.write("<img src=\"/static/img/base.gif\" align=\"absbottom\" alt=\"\" />Projects<br />");
+		} else document.write("<img src=\"/static/img/base.gif\" align=\"absbottom\" alt=\"\" />Jobs<br />");
 	
 		var recursedNodes = new Array();
 		addNode(startNode, recursedNodes);
@@ -126,12 +126,12 @@ function addNode(parentNode, recursedNodes) {
 			}
 
 			// Start link
-			var xxx = nodeValues[3];
+			var xxx = nodeValues[2];
 			var ccc = "";
 			if ( xxx.endsWith("...") ) {
 				ccc = " target=\"" + xxx + "\" ";
 			}
-			document.write("<a href=\"" + xxx + "\" " + ccc + " onmouseover=\"window.status='" + nodeValues[2] + "';return true;\" onmouseout=\"window.status=' ';return true;\">");
+			document.write("<a href=/designer?job_name=" + xxx.replaceAll("...","") + ccc + ">");
 			
 			// Write out folder & page icons
 			if (hcn) {
@@ -194,4 +194,46 @@ if(!Array.prototype.pop) {
 		return lastElement;
 	}
 	Array.prototype.pop = array_pop;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Gera IDs e estrutura hierárquica
+function parseCsvToTreeArray(csv) {
+  const lines = csv.split("\n");
+  const map = {}; // caminho -> id
+  const result = [];
+  let currentId = 1;
+
+  for (let line of lines) {
+    const parts = line.trim().split("|");
+    let path = "";
+    let parentPath = "";
+    let parentId = 0;
+
+    for (let i = 0; i < parts.length; i++) {
+      parentPath = path;
+      path = path ? path + "|" + parts[i] : parts[i];
+
+      if (!(path in map)) {
+        const id = currentId++;
+        map[path] = id;
+        const name = parts[i];
+        const link = parts.slice(0, i + 1).join("...");
+        const parent = map[parentPath] || 0;
+        result.push(`${id}|${parent}|${name}|${link}`);
+      }
+    }
+  }
+  return result;
 }

@@ -154,5 +154,6 @@ class ETL_IN:
       s3.meta.client.download_file( self.boto3_bucket_data['bucket'], self.boto3_filename, self.boto3_name )
 
     if self.config['C_TYPE'] == "sql" and self.sql_before != None:
+      print(self.sql_before)
       self.cur.execute(  self.sql_before   )     
 
