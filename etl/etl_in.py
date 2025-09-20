@@ -3,6 +3,7 @@ import etl_odata
 import boto3
 import json
 import os
+import re
 import xml.etree.ElementTree as ET
 from unicodedata import normalize
 
@@ -16,7 +17,7 @@ class ETL_IN:
     self.logger_id   = logger_id
 
     if self.config['C_TYPE'] == "filename":
-      self.filename_file_required = self.config['C_FILENAME_FILE_REQUIRED']
+      self.filename_file_required = self.config['C_FILENAME_FILE_REQUIRED'] == "1"
       self.filename               = self.config['C_FILENAME']
       self.filename_fd            = self.config["C_FILENAME_FD"]
 
@@ -28,8 +29,14 @@ class ETL_IN:
       self.boto3_bucket_data = json.loads( etl_utils.get_param_value("AUTHS.S3", self.config['C_BOTO3_BUCKET'] ) )
 
     if self.config['C_TYPE'] == "sql":
+
+      if "#MOD#" in self.config['C_SQL']:
+        match = re.search(r"#MOD_MAX_(\d+)#", self.config['C_SQL'])
+        self.qtd_inst = int( match.group(1) ) if match else etl_utils.CONSTANT_QTD_THREADS
+      else:
+          self.qtd_inst = 1  
+        
       self.db            = etl_utils.connect_db( self.config['C_SQL_DB'] )
-      self.qtd_inst      = 1 if self.config['C_SQL'].find("#MOD#") < 0 else etl_utils.CONSTANT_QTD_THREADS
       self.cur           = self.db.cursor()
       self.sql_arraysize = self.config.get('C_SQL_ARRAYSIZE')
       self.sql_before    = self.config['C_SQL_BEFORE']
@@ -40,7 +47,7 @@ class ETL_IN:
         self.sql_arraysize = 5000
 
       if self.config['C_TYPE'] == "xml":        
-        self.xml_file_required = self.config['C_XML_FILE_REQUIRED']
+        self.xml_file_required = self.config['C_XML_FILE_REQUIRED'] == "1"
         self.xm_filename       = self.config['C_XML_FILENAME']
         self.xml_fields        = self.config['C_XML_FIELDS'].split("\n")
 

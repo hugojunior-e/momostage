@@ -7,13 +7,6 @@
 	<script type="text/javascript" src="/static/js/tree.js"></script>
 
 	<script type="text/javascript">
-		function jsLogByBatchId(p_batch_id) {
-			ajax("/info", { "name":"log_batch_id", "batch_id": p_batch_id }, function (ret) {
-				a = window.open('');
-				a.document.body.innerHTML = "<pre>" + ret.message + "</pre>";
-			}, null);
-		}
-
 		function jsShowPidDetail(pid) {
 			const elementos = document.querySelectorAll('[id^="pid' + pid + '"]');
 			elementos.forEach(el => {
@@ -36,16 +29,18 @@
 			ajax("/info", { "name": "process_aborted", "sql_pars": [] }, function (a) {
 				document.all.id_process_aborted.innerHTML = a.message;
 				document.getElementById('id_table_proc').className = 'table_detail';
-				document.getElementById('id_table_proc').querySelectorAll("tr").forEach(row => {
-					if (row.cells[5].innerHTML != "ALGARSCHEDULER") {
-						row.cells[1].innerHTML = '<a href="/designer?job_name=' + row.cells[1].innerHTML + '" target=__blank>' + row.cells[1].innerHTML + '</a>';
-					}
+				document.getElementById('id_table_proc').querySelectorAll("tr").forEach( (row, index) => {
+					if ( index > 0 ) {
+						if (row.cells[5].innerHTML != "ALGARSCHEDULER") {
+							row.cells[1].innerHTML = '<a href="/designer?job_name=' + row.cells[1].innerHTML + '" target=__blank>' + row.cells[1].innerHTML + '</a>';
+						}
 
-					row.cells[2].innerHTML = '<a href=# onclick="jsLogByBatchId(' + row.cells[2].innerHTML + ')">' + row.cells[2].innerHTML + '</a>';
-					if (row.cells[0].innerHTML == "F") row.cells[0].innerHTML = "🟢";
-					if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = "🟥";
-					if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = "🔷";
-					if (row.cells[0].innerHTML == "-") row.cells[0].innerHTML = "❌";
+						row.cells[2].innerHTML = '<a href=/logger?batch_id=' + row.cells[2].innerHTML + ' target=LOGG>' + row.cells[2].innerHTML + '</a>';
+						if (row.cells[0].innerHTML == "F") row.cells[0].innerHTML = "🟢";
+						if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = "🟥";
+						if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = "🔷";
+						if (row.cells[0].innerHTML == "K") row.cells[0].innerHTML = "❌";
+					}
 				})
 			}, null);
 		}
@@ -73,6 +68,7 @@
 		<button onclick="window.open('/designer?job_name=newjob')">Create new Job</button> &nbsp;
 		<button onclick="window.open('/globals')">Parameters Globals</button> &nbsp;
 		<button onclick="window.open('/sequences')">Sequences</button> &nbsp;
+		<button onclick="window.open('/monitor')">Dashboard Process</button> &nbsp;
 
 		<div id="id_title_page" class="titles_toolbar" style="cursor: pointer" onclick="window.open('/logout')">Logout:
 			{{ login }}</div>
@@ -96,11 +92,11 @@
 				<div class="div_pre" id="id_memory"></div>
 				<br>
 		
-				<span class="titulo">Process Running Now </span>
+				<span class="titulo">Process Running Now (SO)</span>
 				<div class="div_pre" id="id_process_running"></div>
 				<br>
 
-				<span class="titulo">Last Aborted Process</span> 🟢 - OK | 🟥 - ABORTED | 🔷 - IN EXECUTION | ❌ - KILLED
+				<span class="titulo">Monitor Process (Timeled) </span> <!-- 🟢 - OK | 🟥 - ABORTED | 🔷 - IN EXECUTION | ❌ - FINISHED WITH WARNINGS -->
 				<div class="div_pre" id="id_process_aborted"></div>
 			</div>
 

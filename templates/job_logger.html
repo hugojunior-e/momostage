@@ -1,0 +1,48 @@
+<html>
+
+<head>
+	<title>Algar ETL</title>
+	<link rel="StyleSheet" href="/static/styles/style.css" type="text/css">
+	<script type="text/javascript" src="/static/js/functions.js"></script>
+
+	<style>
+body {
+  margin: 10px;
+}
+
+vv {
+	display: none;
+  }
+</style>
+
+	<script>
+        function js_bigdata(id) {
+			const x    = document.getElementById("big_" + id).innerHTML;
+			const obj  = JSON.parse(x);
+			const keys = Object.keys(obj);
+			a          = window.open('');
+			a.document.body.innerHTML = "<pre>" + obj[ keys[0] ] + "</pre>";
+        }
+
+		function jsLogByBatchId() {
+			data = { "name":"log_batch_id","batch_id":"{{batch_id}}", "job_name":"{{job_name}}" };
+			if ( '{{job_name}}' == '-' ) {
+				data = { "name":"log_batch_id","batch_id":"{{batch_id}}" };
+			}
+
+			ajax("/info", data, function (ret) {
+				id_log.innerHTML = ret.message;
+			}, null);
+		}
+	</script>
+</head>
+
+<body>
+    <pre id="id_log"></pre>
+
+	<script>
+	  jsLogByBatchId()
+    </script>
+</body>
+
+</html>

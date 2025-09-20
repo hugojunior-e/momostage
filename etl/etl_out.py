@@ -89,25 +89,31 @@ class ETL_OUT:
       self.fp               = None
 
   def boto3SendFiles(self):
-      etl_utils.log(self.logger_id, "Start Upload Files")
-      session = boto3.Session(aws_access_key_id=self.boto3_bucket_data['access_key'],aws_secret_access_key=self.boto3_bucket_data['secret_key'])      
-      s3      = session.client('s3')
+      if "__fake__" in self.boto3_filename:
+        for file_orig in self.boto3_file_list:
+          if os.path.exists(file_orig):
+            etl_utils.log(self.logger_id, f"Removing {file_orig}")
+            os.remove(file_orig)        
+      else:  
+        etl_utils.log(self.logger_id, "Start Upload Files")
+        session = boto3.Session(aws_access_key_id=self.boto3_bucket_data['access_key'],aws_secret_access_key=self.boto3_bucket_data['secret_key'])      
+        s3      = session.client('s3')
 
-      for file_orig in self.boto3_file_list:
-        if os.path.exists(file_orig):
-          prefix         = self.boto3_filename.split("/")
-          prefix[-1]     = file_orig.split( os.path.sep )[-1]
-          file_remote    = "/".join( prefix )
+        for file_orig in self.boto3_file_list:
+          if os.path.exists(file_orig):
+            prefix         = self.boto3_filename.split("/")
+            prefix[-1]     = file_orig.split( os.path.sep )[-1]
+            file_remote    = "/".join( prefix )
 
-          s3.upload_file( file_orig , self.boto3_bucket_data['bucket'], file_remote )
-          etl_utils.log(self.logger_id, f"Uploaded File {file_orig} -> {file_remote} ")
+            s3.upload_file( file_orig , self.boto3_bucket_data['bucket'], file_remote )
+            etl_utils.log(self.logger_id, f"Uploaded File {file_orig} -> {file_remote} ")
 
-          if self.temp_file_operation == "1":
-            os.remove(file_orig)
-          if self.temp_file_operation == "2":
-            os.rename(file_orig, file_orig + ".done")
-        else:
-          etl_utils.log(self.logger_id, f"ERROR(not found) Upload File {file_orig}")
+            if self.temp_file_operation == "1":
+              os.remove(file_orig)
+            if self.temp_file_operation == "2":
+              os.rename(file_orig, file_orig + ".done")
+          else:
+            etl_utils.log(self.logger_id, f"ERROR(not found) Upload File {file_orig}")
 
   #=======================================================================================================
   #
@@ -124,6 +130,7 @@ class ETL_OUT:
         self.db = etl_utils.connect_db( self.sql_db )
         self.cur = self.db.cursor()
       self.cur.executemany( self.sql , data)
+      self.db.commit()
 
 
     # ----------------------------------------

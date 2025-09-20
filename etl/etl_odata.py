@@ -132,7 +132,7 @@ class ETL_ODATA:
             etl_utils.log(self.logger_id, f"END page {t.page} QTD {  t.count } Time Elapsed: { etl_utils.diff_date(t.dt_fim,t.dt_ini )  } " )
 
         if error != None:
-            etl_utils.log(self.logger_id, error,shortcut="I",logbigdata=error_bd)
+            etl_utils.log(self.logger_id, error,logbigdata=error_bd)
             raise Exception(error)
         
         x = 0

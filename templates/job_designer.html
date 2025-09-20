@@ -12,38 +12,30 @@
         //
         //#####################################################################################################
 
+        function jsTestConnection() {
+            if ( document.all.C_SQL_DB.value == "" ) {
+                alert("Select Database first.");
+                return;
+            }
 
+            ajax("/info", { "name":"test_connection", "db_name": document.all.C_SQL_DB.value }, function(a) {
+                alert(a.message);
+            }, null);
+        }
 
 
         function js_job_parameters_ref(opt) {
             document.all.id_job_def_parameters.style.display = (opt == 1) ? 'block' : '';
         }
 
-        function js_log_by_id() {
-			ajax("/info", { "name":"log", "job_logger_id":document.all.id_logger_job_id.value}, function(a) {
-				document.all.id_view_log_text.innerHTML = a.message;					
-			}, null);
-        }
 
         function js_log_lotes() {
             document.all.id_view_log.style.display = document.all.id_view_log.style.display == 'block' ? 'hidden' : 'block';
             
 			ajax("/info", { "name":"log_lotes", "job_name": document.all.P_NEWJOB_NAME.value }, function(a) {
-                document.all.id_view_log_lotes.innerHTML = a.message;
-                document.all.id_view_log_text.innerHTML = '';
-                js_log_by_id();				
+                id_view_log_lotes.innerHTML = a.message;
 			}, null);
         }
-
-
-        
-        function js_log_big_view(rid) {
-			ajax("/info", { "name":"log_big", "rid":rid}, function(ret) {
-                a = window.open('');
-                a.document.body.innerHTML = "<pre>" + ret.message + "</pre>";
-			}, null);
-        }
-
 
 
         function js_job_config_sh(opt) {
@@ -57,12 +49,19 @@
                 var pars                     = document.all.C_JOB_DEF_PARAMETERS.value.trim();
                 id_job_run_parameters.value  = ( pars.length > 0) ? ( pars + "\n").replaceAll("\n","=\n") : "";
             } else {
+
+                if ( document.all.P_NEWJOB_NAME.value == 'newjob' ) {
+                    alert("save the job before running!");
+                    return;
+                }
+
                 if ( confirm("Can execute?" ) ) {
 
                     ajax("/info", 
                          { "name":"job_execute", "job_name": document.all.P_NEWJOB_NAME.value, "job_run_parameters": id_job_run_parameters.value }, 
                          function(a) {
                             alert(a.message);
+                            id_job_run.style.display = 'none';
                          }, null);
                 }            
             }
@@ -85,6 +84,16 @@
                 return;
             }
 
+            if ( document.all.P_NEWJOB_NAME.value.length < 2 || document.all.P_NEWJOB_NAME.value == 'newjob' ) {
+                alert('Job Name Cant Empty or "newjob"!');
+                return;
+            }
+
+            if ( document.all.P_NEWJOB_FOLDER.value.length < 2 ) {
+                alert('Folder Name Cant Empty!');
+                return;
+            }
+                        
             data = {"job_name"                : document.all.P_NEWJOB_NAME.value,
                     "job_components"          : g_components.join(","),
                     "C_JOB_DEF_FOLDERS_NAME"  : document.all.P_NEWJOB_PROJECT.value + "|" + document.all.P_NEWJOB_FOLDER.value,
@@ -263,8 +272,7 @@
         <div class="itools_modal_content">
             <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
             <h2>View Logger</h2>
-            <div id="id_view_log_lotes"></div>
-            <pre id="id_view_log_text" style="font-size: 12;"></pre>
+            <pre id="id_view_log_lotes"></pre>
         </div>  
     </div>
 
@@ -306,7 +314,14 @@
             <table >
                 <tr><td>Name</td><td> <input type="text" id="C_FILENAME_NAME"></td> </tr>
                 <tr><td>Path Filename</td><td> <input type="text" id="C_FILENAME"></td> </tr>
-                <tr><td>File Required</td><td><input type="checkbox" id="C_FILENAME_FILE_REQUIRED"></td> </tr>
+                <tr><td>File Required</td>
+                    <td>
+                        <select id="C_FILENAME_FILE_REQUIRED">
+                            <option value="1">Sim</option>
+                            <option value="0">Nao</option>
+                        </select>
+                    </td> 
+                </tr>
                 <tr><td>Fields Delimiter </td><td><input type="text" id="C_FILENAME_FD"></td> </tr>
                 <tr><td>Fields </td><td> <textarea id="C_FILENAME_FIELDS"></textarea></td> </tr>
                 <tr><td colspan="2"><button onclick="jsComponentSave()">Save</button></td> </tr>
@@ -374,7 +389,12 @@
             <table >
                 <tr><td>Name</td><td> <input type="text" id="C_XML_NAME"></td> </tr>
                 <tr><td>FileName</td><td><input type=text id="C_XML_FILENAME"></td> </tr>
-                <tr><td>File Required</td><td><input type="checkbox" id="C_XML_FILE_REQUIRED"></td> </tr>
+                <tr><td>File Required</td><td>
+                        <select id="C_XML_FILE_REQUIRED">
+                            <option value="1">Sim</option>
+                            <option value="0">Nao</option>
+                        </select>
+                </td> </tr>
                 <tr><td>Fields </td><td> <textarea id="C_XML_FIELDS" rows="10"></textarea></td> </tr>
                 
 
@@ -390,13 +410,21 @@
         <h2>Database Editor</h2>
             <table >
                 <tr><td>Name</td><td> <input type="text" id="C_SQL_NAME"></td> </tr>
-                <tr><td>Database</td><td> <select id="C_SQL_DB"></select></td> </tr>
+                <tr><td>Database <a href=# onclick="jsTestConnection()">(test)</a></td><td> <select id="C_SQL_DB"></select></td> </tr>
 
                 <tr><td>SQL Type </td><td><select id="C_SQL_TYPE">
                     <option value="Insert">Insert</option>
                     <option value="Update Then Insert">Update Then Insert</option>
                 </select>   </td> </tr>
-                <tr><td>SQL Auto</td><td> <input type="checkbox" id="C_SQL_AUTO"></td> </tr>
+                <tr>
+                      <td>SQL Format</td>
+                      <td> 
+                        <select id="C_SQL_AUTO">
+                            <option value="1">Auto</option>
+                            <option value="0">Manual</option>
+                        </select>                        
+                      </td> 
+                </tr>
 
                 <tr valign="top">
                     <td >SQL</td><td><textarea id="C_SQL" rows="5" cols="80"></textarea></td>
@@ -425,8 +453,8 @@
         </h2>
             <table >
                 <tr><td>Project</td><td><select id="P_NEWJOB_PROJECT"></select></td> </tr>
-                <tr><td>Folder</td><td><input type="text" id="P_NEWJOB_FOLDER" style="text-transform: uppercase;"></td> </tr>
-                <tr><td>Job Name</td><td><input type="text" id="P_NEWJOB_NAME" value="{{job_name}}"></td></tr>
+                <tr><td>Folder</td><td><input type="text" id="P_NEWJOB_FOLDER" oninput="this.value = this.value.toUpperCase();"></td> </tr>
+                <tr><td>Job Name</td><td><input type="text" id="P_NEWJOB_NAME" oninput="this.value = this.value.toUpperCase();" value="{{job_name}}"></td></tr>
                 <tr><td colspan="2"><button onclick="js_job_save_new()">Save</button></td> </tr>
             </table>
         </div>  
@@ -487,7 +515,8 @@
             el.setAttribute('spellcheck', 'false');
             el.classList.add('no-spellcheck');
         });
-
+        
+        jsNoSpeel();
     </script>
 
 </body>

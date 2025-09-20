@@ -28,6 +28,28 @@
 			FL_ACTIVE.checked              = true;			
 		}
 
+		function jsStartSequence() {
+			if (id_sequences_jobs.querySelectorAll("table").length == 0) {
+				alert("No sequence selected.");
+				return;
+			}
+
+			tb = id_sequences_jobs.querySelectorAll("table")[0];
+			if (tb.rows.length < 2) {
+				alert("No job in the sequence.");
+				return;
+			}
+
+			seq_name = tb.rows[1].cells[1].innerHTML;
+
+			if (!confirm("Start sequence " + seq_name + "?"))
+				return;
+
+			ajax("/info", { "name": "job_sequence_start", "SEQ_NAME": seq_name }, function (a) {
+				alert(a.message);
+			}, null);
+		}	
+
 		function jsSave() {
 			dados = {
 				"name"       : "job_sequence_save",
@@ -37,7 +59,7 @@
 				"PARAMETERS" : PARAMETERS.value,
 				"ORDER_PRI"  : ORDER_PRI.value,
 				"ORDER_SEC"  : ORDER_SEC.value,
-				"FL_ACTIVE"  : FL_ACTIVE.checked ? "1" : "0"
+				"FL_ACTIVE"  : FL_ACTIVE.checked ? "1" : "0",
 			};
 
 			ajax("/info", dados, function (a) {
@@ -82,7 +104,10 @@
 				<span class="titulo">Jobs </span>
 				<hr>
 				<div class="div_pre" id="id_sequences_jobs"></div>
+				<br>
 				<button onclick="jsAdd()">Add</button>
+				&nbsp;
+				<button onclick="jsStartSequence()">Start Sequence</button>
 			</div>
 		</div>
 
@@ -93,8 +118,8 @@
         <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
         <h2>Sequence Editor</h2>
             <table >
-                <tr><td>SEQ_NAME:</td><td><input type="text" id="SEQ_NAME" style="text-transform: uppercase;"></td> </tr>
-                <tr><td>JOB_NAME:</td><td><input type="text" id="JOB_NAME" style="text-transform: uppercase;"></td> </tr>
+                <tr><td>SEQ_NAME:</td><td><input type="text" id="SEQ_NAME" oninput="this.value = this.value.toUpperCase();"></td> </tr>
+                <tr><td>JOB_NAME:</td><td><input type="text" id="JOB_NAME" oninput="this.value = this.value.toUpperCase();"></td> </tr>
                 <tr><td>PARAMETERS:</td><td><textarea id="PARAMETERS"></textarea></td> </tr>
                 <tr><td>ORDER_PRI:</td><td><input type="number" id="ORDER_PRI"></td> </tr>
                 <tr><td>ORDER_SEC:</td><td><input type="number" id="ORDER_SEC"></td> </tr>
@@ -119,7 +144,8 @@
 					e.cells[0].innerHTML = "<a href=# onclick=jsSequenceDetail('" + e.cells[0].innerHTML + "') >" + e.cells[0].innerHTML + "</a>";
 			});
 		}, null);
-
+		
+		jsNoSpeel();
 	</script>
 </body>
 

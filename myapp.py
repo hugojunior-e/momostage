@@ -5,7 +5,7 @@ import subprocess
 import os
 import psutil
 import time
-
+import re
 from ldap3 import Server, Connection, ALL, core
 from flask import Flask, render_template, redirect, request, session
 from markupsafe import Markup
@@ -181,13 +181,15 @@ def job_info_memory():
 
 
 def job_info_last_abort():
+    title    = "<tr><td>#</td><td>name</td><td>id batch</td><td>started at</td><td>managed by</td><td>time</td></tr>"  
+
     sql   = db_sql("job_get_last_executions")
     dados = db_execute(sql)
     ret = []
     for x in dados.data:
         bits = [ "" if a == None else str(a) for a in x ]
         ret.append( "<tr><td>" + "</td><td>".join(bits) + "</td></tr>" )
-    ret = "<table width=100% id=id_table_proc>" + "".join(ret) + "</table>"
+    ret = f"<table width=100% id=id_table_proc>{title}" + "".join(ret) + "</table>"
     return {"message":ret}
 
 
@@ -225,7 +227,9 @@ def job_info_process_running():
             
             mem     = ( f"{ proc.info['memory_percent'] }" ).split(".")
             mem_fmt = mem[0] + "." + mem[1][0:2]
-            if proc.info['name'] not in lista_as:
+            name_pc = " ".join(proc_cmd[2 if is_mms else 3:])
+
+            if name_pc not in lista_as:
                 tabela = f"""
                     {tabela}
                     <tr {pid_show}> 
@@ -234,12 +238,12 @@ def job_info_process_running():
                         <td>{ start_time        }</td>
                         <td>{ mem_fmt } </td>
                         <td>{ proc.info['cpu_percent']    }</td>
-                        <td>{ " ".join(proc_cmd[2 if is_mms else 3:]) }</td>
+                        <td>{name_pc }</td>
                         <td>{pid_kill} {pid_link}</td>
                     </tr>
                 """
                 if is_as:
-                    lista_as.append( proc.info['name'] )
+                    lista_as.append( name_pc )
 
     ret =  "<table width=100%>" + tabela + "</table>"    
     return {"message":ret}
@@ -299,19 +303,33 @@ def job_info_tablemodel():
 
 
 def job_info_logger_batch_id():
-    sql = db_sql("job_logger_batch_id", [request.form.get("batch_id")])
-    ret = ""
-    j   = "-"
+    log_id   = request.form.get("batch_id")
+    log_job  = request.form.get("job_name")
+    log_file = f"{ eu.get_log_dir() }/{ log_id }.log"
+    log_data = {}
+    ret      = ""
 
-    for x in db_execute(sql).data:
-        if j != x[0]:
-            ret = ret + "<hr>" + x[0] + "<hr>"
-        info = x[2].strip()
-        if x[3] == 1:
-            info = f"""<a href=# onclick="js_log_big_view('{x[4]}')"> {info} </a> """
-        ret = ret + x[1] + "  " + info + "\n" 
-        j   = x[0]
-    return {"message": ret }
+    if os.path.exists(log_file):
+        with open(log_file, "r") as arq:
+            for idx, x in enumerate(arq.readlines()):
+                match    = re.search(r'\[(.*?)\]', x)
+                if match:
+                    job_name = match.group(1)
+                    job_line = x
+                    if log_job == None or log_job == job_name:
+                        if "[BIGDATA]" in x:
+                            xxx             = x.split("[BIGDATA]")
+                            job_line        = f"{xxx[0]}<a onclick=js_bigdata({idx}) href=#>[BIGDATA]</a>\n<vv id=big_{idx}>{xxx[1][1:]}</vv>"
+
+                        job_val  = log_data.get(job_name)
+                        log_data[job_name] = ("" if job_val == None else job_val ) + job_line
+
+        for x in log_data:
+            ret = ret + "<hr>" + x + "<hr>" + log_data[x]
+    else:
+        ret = "Logfile not found!"
+        
+    return { "message": ret }
 
 
 def job_info_logger_big():
@@ -325,8 +343,8 @@ def job_info_logger_lotes():
     sql      = db_sql("job_logger_lotes", [job_name])
     ret      = ""
     for x in db_execute(sql).data:
-        ret = ret + f'<option value="{x[0]}">{x[1]}</option>'
-    return { "message": f'<select id=id_logger_job_id onChange="js_log_by_id()">' + ret + """</select> <button onclick="js_log_by_id()">refresh</button>""" }
+        ret = ret + f'<li> <a href=/logger?batch_id={x[0]}&job_name={job_name} target=LLOG> {x[0]}  </a> - {x[1]}'
+    return { "message": ret }
 
 
 def job_info_logger():
@@ -362,6 +380,25 @@ def job_execute():
     return {"message" :"Started..." }
 
 
+def job_sequence_start():
+    seq_name = request.form.get("SEQ_NAME")
+    print(f"""nohup /home/producao/DW/py/ALGAR_PRD_ExecGen.py -P {seq_name} &""")
+    subprocess.Popen( f"""nohup /home/producao/DW/py/ALGAR_PRD_ExecGen.py -P {seq_name} &""", shell=True)
+    return {"message": "Sequence started."}
+
+
+def test_connection():
+    db_name = request.form.get("db_name")
+    if db_name == None or db_name == "":
+        return {"message": "No database selected."}
+    try:
+        tt = eu.connect_db(db_name)
+        if tt is None:
+            return {"message": f"Could not connect to {db_name}."}
+        return {"message": f"Connection to {db_name} successful."}
+    except Exception as e:
+        return {"message": f"Error connecting to {db_name}: {str(e)}"}
+    
 #######################################################################################
 #  
 #######################################################################################
@@ -407,6 +444,12 @@ def info():
 
     if name == "job_execute":
         return job_execute()
+    
+    if name == "test_connection":
+        return test_connection()
+    
+    if name == "job_sequence_start":
+        return job_sequence_start()
 
 
 
@@ -602,6 +645,11 @@ def logout():
 #  open pages /  globals  designer
 #######################################################################################
 
+@app.route("/logger", methods=["GET", "POST"])
+def job_logger():
+    jn = "-" if request.args.get("job_name") == None else request.args.get("job_name")
+    id = request.args.get("batch_id")
+    return render_template( 'job_logger.html',batch_id = id, job_name = jn )
 
 @app.route("/sequences")
 def job_sequences():

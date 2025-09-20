@@ -1,11 +1,11 @@
 g_components = [
     'C_TYPE','C_NAME',
     'C_SQL_DB','C_SQL','C_SQL_AFTER','C_SQL_BEFORE','C_SQL_FIELDS/target','C_SQL_TYPE/target','C_SQL_AUTO/target',
-    'C_FILENAME','C_FILENAME_FD','C_FILENAME_FIELDS/target','C_FILENAME_FILE_REQUIRED/orig',
+    'C_FILENAME','C_FILENAME_FD','C_FILENAME_FIELDS/target','C_FILENAME_FILE_REQUIRED/origin',
     'C_ODATA_TH_COUNT','C_ODATA_TH_SIZE','C_ODATA_URL','C_ODATA_AUTH','C_ODATA_FIELDS',
     'C_DATASET','C_DATASET_FIELDS',
     'C_BOTO3_BUCKET','C_BOTO3_FILENAME','C_BOTO3_FD','C_BOTO3_FIELDS','C_BOTO3_FORMAT',
-    'C_XML_FILENAME','C_XML_FIELDS','C_XML_FILE_REQUIRED/orig'
+    'C_XML_FILENAME','C_XML_FIELDS','C_XML_FILE_REQUIRED/origin'
 ];
 
 function ajax(url, dataBody, jsAction, jsError) {
@@ -91,17 +91,10 @@ function data_get(data, data_fields, local) {
         el  = document.getElementById(tag);
         if (el != null) {
             el.disabled = false;
+            el.value    = data[tag] == null ? "" : data[tag];
 
-            if ( xx.length == 1 || xx[1] == local ) {
-                if ( el.type == "checkbox")
-                    el.checked   = data[tag];
-                else
-                    el.value   = data[tag] == null ? "" : data[tag];
-            }
-            else {
+            if ( xx.length > 1 && xx[1] != local ) {
               el.disabled = true;
-              if ( el.type != "checkbox")
-                el.value   = "";
             }
         }
     });    
@@ -120,4 +113,12 @@ function data_put(list_obj, g_objeto) {
             }
         }
     });
+}
+
+
+function jsNoSpeel() {
+        document.querySelectorAll('input, textarea, [contenteditable]').forEach(el => {
+            el.setAttribute('spellcheck', 'false');
+            el.classList.add('no-spellcheck');
+        });
 }

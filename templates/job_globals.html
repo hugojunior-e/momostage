@@ -32,7 +32,7 @@
 				"GROUP_NAME"  : GROUP_NAME.value,
 				"PARAM_NAME"  : PARAM_NAME.value,
 				"PARAM_VALUE" : PARAM_VALUE.value,
-				"DESCRIPTION" : DESCRIPTION.innerHTML
+				"DESCRIPTION" : DESCRIPTION.value
 			};
 
 			ajax("/info", dados, function (a) {
@@ -92,11 +92,11 @@
 			<table>
 				<tr>
 					<td>GROUP_NAME:</td>
-					<td><input type="text" id="GROUP_NAME" style="text-transform: uppercase;"></td>
+					<td><input type="text" id="GROUP_NAME" oninput="this.value = this.value.toUpperCase();"></td>
 				</tr>
 				<tr>
 					<td>PARAM_NAME:</td>
-					<td><input type="text" id="PARAM_NAME" style="text-transform: uppercase;"></td>
+					<td><input type="text" id="PARAM_NAME"></td>
 				</tr>
 				<tr>
 					<td>PARAM_VALUE:</td>
@@ -128,6 +128,8 @@
 					e.cells[0].innerHTML = "<a href=# onclick=jsJobGlobalsDetail('" + e.cells[0].innerHTML + "') >" + e.cells[0].innerHTML + "</a>";
 			});
 		}, null);
+
+		jsNoSpeel();
 
 	</script>
 </body>

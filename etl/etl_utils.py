@@ -1,10 +1,14 @@
 import oracledb
+import mysql.connector
+import jaydebeapi
 import json
 import uuid
 import os
 import requests
 import time
 import snowflake.connector
+import redshift_connector
+import threading
 
 from datetime import datetime
 from multiprocessing import Manager
@@ -14,7 +18,7 @@ oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_12")
 CONSTANT_OWNER = "DWADM"
 
 CONSTANT_SQL_JOB_BATCH_PARAMETERS = f"""
-    select parameters
+    select nvl(parameters,'-')
       from {CONSTANT_OWNER}.ms_job_batch
      where id = '%s'
        and job_name = '%s'
@@ -66,7 +70,9 @@ CONSTANT_SQL_JOB_BATCH_CREATE = f"""
 declare
   v_id number;
 begin
-  select nvl(max(id),0) + 1 into v_id from {CONSTANT_OWNER}.ms_job_batch;
+  SELECT {CONSTANT_OWNER}.ms_job_batch_seq.nextval
+    INTO v_id
+    FROM dual;
   
   insert into {CONSTANT_OWNER}.ms_job_batch(id, job_name, created_at, created_by, managed_by, parameters, status)
   values (
@@ -115,7 +121,7 @@ SELECT transf,
  order by job_order
 """
 
-CONSTANT_QTD_THREADS = 6
+CONSTANT_QTD_THREADS = 5
 
 
 AS_GERA_LOTE = f"""
@@ -125,9 +131,9 @@ DECLARE
   v_key_value VARCHAR2(200);
   v_comma     NUMBER;
 BEGIN
-  SELECT nvl(MAX(id), 0) + 1
+  SELECT {CONSTANT_OWNER}.ms_job_batch_seq.nextval
     INTO v_id
-    FROM {CONSTANT_OWNER}.ms_job_batch;
+    FROM dual;
 
   INSERT INTO {CONSTANT_OWNER}.ms_job_batch (
     id,
@@ -197,7 +203,7 @@ AS_VERIFICA_LOTE = f"""
 select decode(count(1), 0, 'Finaliza', 'Aguarda') as retorno
   from {CONSTANT_OWNER}.ms_job_batch a
  where a.id = $p_lote$
-   and a.status in ('P', 'E')
+   and a.status in ('P')
 """
 
 
@@ -246,19 +252,23 @@ AS_VERIFICA_PENDENTES = f"""
   select count(1) from {CONSTANT_OWNER}.ms_job_batch where id = $p_lote_id$ and status <> 'F'
 """
 
+AS_ATUALIZA_FINAL = f"""
+begin
+  update {CONSTANT_OWNER}.ms_job_batch 
+     set status = 'K'
+   where id = $p_lote_id$ and status not in ( 'F', 'A', 'AC' );
+  commit; 
+end;
+"""
+
+#=======================================================================================================
+#
+#=======================================================================================================
+
 def local_db():
    x = oracledb.connect(dsn="(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-stg.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWHOM)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))", user="dwadm", password="dwtst")
    return x
 
-
-LOG_db         = local_db()
-LOG_db_cur     = LOG_db.cursor()
-LOG_data       = []
-LOG_verificar  = True
-LOG_print      = None
-
-LOG_manager    = Manager()
-LOG_dados      = LOG_manager.list()
 #=======================================================================================================
 #
 #=======================================================================================================
@@ -266,9 +276,42 @@ LOG_dados      = LOG_manager.list()
 
 def connect_db(dbname):
   dados = json.loads(get_param_value("DATABASES", dbname.upper()))
-  x = oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dados['tns'])
-  return x
+  
+  if "oracle" in dados['dbtype']:
+    return oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dados['tns'])
 
+  if "mysql" in dados['dbtype']:
+    return mysql.connector.connect(host=dados['host'],port=3306,user=dados['usr'],password=dados['pwd'],database=dados['database'])
+
+  if "redshift" in dados['dbtype']:
+    return redshift_connector.connect( host=dados['host'],database=dados['database'],port=5439,user=dados['usr'],password=dados['pwd'],  timeout=60)
+  
+  if "db2" in dados['dbtype']:
+    jars = ['/app_etl/etl/db2jcc-db2jcc4.jar']
+
+    return jaydebeapi.connect(
+        'com.ibm.db2.jcc.DB2Driver',
+        f"jdbc:db2://{dados['tns']}",
+        [dados['usr'], dados['pwd']],
+        jars
+    )
+
+  if "snowflake" in dados['dbtype']:
+    private_key_path = "/app_etl/rsa_key_algaretl.der"
+
+    with open(private_key_path, "rb") as key_file:
+        private_key = key_file.read()
+
+    return snowflake.connector.connect(
+        user=dados.get('user'),
+        account=dados.get('account'),
+        private_key=private_key,
+        warehouse=dados.get('warehouse'),
+        database=dados.get('database'),
+        schema=dados.get('schema'),
+        role=dados.get('role')
+    )  
+  return None
 
 def diff_date(d1, d2):
    x = str( d1 - d2 ) 
@@ -293,8 +336,10 @@ def get_param_value(group_name, param_name):
   return ret
 
 def get_tmp_dir():
-    return "/app/temp_mms"
+    return "/app/temp"
 
+def get_log_dir():
+    return "/app/logs"
 
 def update_batch_status(batch_id, job_name, status):
   try:
@@ -348,62 +393,35 @@ def clean_and_convert_tuples(data, remove_chars=None):
 # tratativa de log
 #=======================================================================================================
 
+LOG_print      = None
 LOG_MAP        = {}
-LOG_PREFIX     = {}  
 
 
-def log_add_prefix(prefix):
-  LOG_PREFIX[ f"th_{ os.getpid() }" ] = prefix   
-
-def log(logger_id, msg, shortcut="I",logbigdata=""):
+def log(logger_id, msg, logbigdata=""):
   try:
     job_name    = LOG_MAP[logger_id]['job_name']
     batch_id    = LOG_MAP[logger_id]['batch_id']
-    log_prefix  = LOG_PREFIX.get( f"th_{ os.getpid() }"  )
+    log_prefix  = LOG_MAP.get( f"th_{ os.getpid() }"  )
 
     if log_prefix == None:
         log_prefix = ""
-
+        
     if msg == "#":
         msg = "-" * 50
-      
-    mensagem =  (job_name, batch_id, log_prefix + msg, logger_id, shortcut, logbigdata)
-    LOG_dados.append( mensagem  )
-    
-  except Exception as e:
-    print("Error on Logger " + str(e))
 
-  if LOG_print:
-    LOG_print(f'[{job_name}]: {log_prefix}{msg}')  
-  else:     
-    print(f'{ datetime.now().strftime("%m/%d/%Y %H:%M:%S") }:[{job_name}]: {log_prefix}{msg}')  
+    msg_log = f'{ datetime.now().strftime("%m/%d/%Y %H:%M:%S") }:[{job_name}]: {log_prefix}{msg}'
 
-
-def log_buffer():
-  global LOG_verificar
-  global LOG_dados
-  global LOG_manager
+    with open( f"{get_log_dir()}/{batch_id}.log", "a") as arq:
+       arq.write( f"{msg_log}\n" )
+       if len(logbigdata) > 1:
+         arq.write( f'{ datetime.now().strftime("%m/%d/%Y %H:%M:%S") }:[{job_name}]: [BIGDATA]: {log_prefix}{  json.dumps({msg:logbigdata})   }\n'   )
+  except:
+    pass
   
-  LOG_verificar = True
-  while LOG_verificar or len(LOG_dados) > 0:
-    if not len(LOG_dados):
-      time.sleep(1)
-      continue
-    mensagem = LOG_dados.pop(0)
-
-    LOG_db_cur.execute(f"""
-                declare
-                  v_line_id number; 
-                begin
-                    SELECT DWADM.MS_JOB_LOGGER_LINE_ID_SEQ.NEXTVAL INTO v_line_id
-                      FROM DUAL;
-                                            
-                    INSERT INTO {CONSTANT_OWNER}.ms_job_LOGGER
-                    (JOB_NAME, batch_id, CREATED_AT, LINE, LINE_ID, ID, LINE_TYPE,LOGBIGDATA)  
-                    VALUES (:1,:2,SYSDATE,:3,v_line_id,:4,:5,:6);
-                    commit;
-                end;""", mensagem )       
-  LOG_manager.shutdown()
+  if LOG_print:
+    LOG_print(f'[{job_name}]: {msg}')  
+  else:     
+    print( msg_log )  
 
 
 #=======================================================================================================
@@ -427,32 +445,28 @@ def send_sms(too, phone):
 # execute on snowflake
 #=======================================================================================================
 
-def execute_on_snowflake(command):
+def execute_on_db(command, database, is_sql=False):
   try:
-    params = get_param_value("PARAMETERS", "SNOWFLAKE.ALGARETL")
-    config = json.loads(params)
-
-    private_key_path = "/app_etl/rsa_key_algaretl.der"
-
-    with open(private_key_path, "rb") as key_file:
-        private_key = key_file.read()
-
-    conn = snowflake.connector.connect(
-        user=config.get('user'),
-        account=config.get('account'),
-        private_key=private_key,
-        warehouse=config.get('warehouse'),
-        database=config.get('database'),
-        schema=config.get('schema'),
-        role=config.get('role')
-    )
-
+    conn   = connect_db(database)
     cursor = conn.cursor()
     cursor.execute(command)   
+    
+    if is_sql:
+      result      = cursor.fetchone()
+      columns     = [desc[0] for desc in cursor.description]
+      row_dict    = dict(zip(columns, result))
+      result_json = json.dumps(row_dict, ensure_ascii=False) 
+      cursor.close()
+      conn.close()
+      return result_json
+    else:
+      cursor.close()
+      conn.close()
+
     return "sucess: " + command
   except Exception as e:
-    return (f"Error executing on Snowflake: {e}")
-
+    return (f"Error executing on DB: {e}")
+  
     
 def human_readable_size(size_bytes):
     if size_bytes == 0:
