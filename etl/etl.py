@@ -3,9 +3,7 @@ import etl_hash
 import etl_in
 import etl_out
 import multiprocessing
-import threading
 import os
-import gc
 import json
 import sys
 import traceback
@@ -17,13 +15,10 @@ class ETL:
     self.job_name        = job_name
     self.global_vars     = []
     self.batch_id        = batch_id
-    self.logger_id       = etl_utils.get_logger_id()
+    self.logger_id       = { "job_name":job_name, "batch_id":batch_id  }
     self.transformations = []
     self.config_orig     = {}
     self.config_target   = {}
-
-    etl_utils.LOG_MAP[self.logger_id] = { "job_name":job_name, "batch_id":batch_id }
-
     
 
 
@@ -47,20 +42,21 @@ class ETL:
 
   def run_job_thread( self, m_resto=0, m_qtd=1 ):
     if m_qtd > 1:
-      etl_utils.LOG_MAP[ f"th_{ os.getpid() }" ] = f"INST=[{m_resto}/{m_qtd}] "
+      self.logger_id[ f"th_{ os.getpid() }" ] = f"INST=[{m_resto}/{m_qtd}] "
       etl_utils.log(self.logger_id,  f"PID=[{ os.getpid() }] - PPID=[{ os.getppid()  }]" )
 
     etapa      = "run_job_thread"
     try:
+      etl_utils.log(self.logger_id, "Preparing inputs.")
       inn       = etl_in.ETL_IN(self.config_orig,logger_id=self.logger_id, m_qtd=m_qtd, m_resto=m_resto)
-      l_saidas  = []
 
+      etl_utils.log(self.logger_id, "Preparing outputs.")
+      l_saidas  = []
       for idx in range( self.config_target['C_OUT_COUNT'] ):
         ss = etl_out.ETL_OUT(idx, self.config_target,m_resto,logger_id=self.logger_id)
         l_saidas.append(ss)
 
       etl_utils.log(self.logger_id, "Loading hasheds.")
-
       lookups = {}
       for r in self.c_hasheds.strip().split("\n"):
         if len(r) > 1:
@@ -70,7 +66,7 @@ class ETL:
       while True:
         etapa = "Loading Data..."
         dados = inn.getData()
-
+        
         if len(dados) == 0:
           break
         
@@ -95,7 +91,8 @@ class ETL:
     except Exception as e:
       MSG = f"POINT: {etapa} MSG: {str(e)}"
       if m_qtd > 1:
-        raise Exception( f"Thread INDEX {m_resto}: {MSG}" )
+        etl_utils.log(self.logger_id,  f"Thread INDEX: {m_resto}: Error: {MSG}"  )
+        raise Exception( "-" )
       return (-1, MSG)
 
 
@@ -129,6 +126,7 @@ class ETL:
         raise Exception(statusMsg)
       
     else:
+      #agora = time.time()
       etl_utils.log(self.logger_id,  f"ID(master) = [{ os.getpid() }]" )
 
       l_thread      = []
@@ -143,10 +141,14 @@ class ETL:
         for x in l_thread:
           if x.is_alive() == False:
             x.join()
-            etl_utils.log(self.logger_id,  f"Thread: { x.index } Status: { x.exitcode } " )
+            etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } Status: { x.exitcode } " )
             l_thread.remove(x)
+
             if x.exitcode != 0:
-              raise Exception( "Thread Error on INDEX: " + str(x.index) )     
+              etl_utils.kill_pids( l_thread , logger_id = self.logger_id)
+              l_thread.clear()
+
+              raise Exception( f"Thread INDEX: {x.index} Status: ERROR" )     
         time.sleep(3)
         
     etl_utils.log(self.logger_id, "Executing OUT.after" )
@@ -237,10 +239,9 @@ class ETL:
 
       etl_utils.log(self.logger_id, "Input Params.")
       etl_utils.log(self.logger_id, f"sys         = {sys.argv}")
-      etl_utils.log(self.logger_id, f"batch_id    = {self.batch_id}")
       etl_utils.log(self.logger_id, f"logger_id   = {self.logger_id}")
       etl_utils.log(self.logger_id, f"global_vars = {self.global_vars}")
-      etl_utils.log(self.logger_id, f"job_sh      = { '' if jsh == None else jsh }")
+      etl_utils.log(self.logger_id, "job_sh", logbigdata=('' if jsh == None else jsh.read()) )
 
       c_origin              = self.apply_filter( origin.read() )
       c_target              = self.apply_filter( target.read() )

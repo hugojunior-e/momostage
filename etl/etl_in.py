@@ -4,6 +4,7 @@ import boto3
 import json
 import os
 import re
+import ibm_db
 import xml.etree.ElementTree as ET
 from unicodedata import normalize
 
@@ -29,24 +30,28 @@ class ETL_IN:
       self.boto3_bucket_data = json.loads( etl_utils.get_param_value("AUTHS.S3", self.config['C_BOTO3_BUCKET'] ) )
 
     if self.config['C_TYPE'] == "sql":
-
       if "#MOD#" in self.config['C_SQL']:
-        match = re.search(r"#MOD_MAX_(\d+)#", self.config['C_SQL'])
+        match = re.search(r"#SQL_MODMAX_(\d+)#", self.config['C_SQL'])
         self.qtd_inst = int( match.group(1) ) if match else etl_utils.CONSTANT_QTD_THREADS
       else:
           self.qtd_inst = 1  
+
+      arsize             = self.config.get('C_SQL_ARRAYSIZE')
+      self.sql_arraysize = int( arsize ) if arsize != None else 5000
         
-      self.db            = etl_utils.connect_db( self.config['C_SQL_DB'] )
-      self.cur           = self.db.cursor()
-      self.sql_arraysize = self.config.get('C_SQL_ARRAYSIZE')
+      etl_utils.log(self.logger_id,  f"DB Opening...{self.sql_arraysize}")
+      self.db      = etl_utils.connect_db( self.config['C_SQL_DB'] )
+      self.db_type = str(type(self.db)).lower().replace("<class '","").replace("'>","")
+      etl_utils.log(self.logger_id,  f"DB Opening...{ self.db_type }")
+
+      if "ibm" not in self.db_type:
+        self.cur           = self.db.cursor()
+
       self.sql_before    = self.config['C_SQL_BEFORE']
       self.sql_query     = self.config['C_SQL'].replace("#RESTO#", str(m_resto)).replace("#MOD#", str(m_qtd)) 
       self.sql_is_open   = False
 
-      if self.sql_arraysize == None or self.sql_arraysize > 5000:
-        self.sql_arraysize = 5000
-
-      if self.config['C_TYPE'] == "xml":        
+    if self.config['C_TYPE'] == "xml":        
         self.xml_file_required = self.config['C_XML_FILE_REQUIRED'] == "1"
         self.xm_filename       = self.config['C_XML_FILENAME']
         self.xml_fields        = self.config['C_XML_FIELDS'].split("\n")
@@ -70,7 +75,7 @@ class ETL_IN:
       
       if self.fp == None:
         if self.xml_file_required == False and os.path.isfile(self.xml_filename) == False:
-          etl_utils.log(self.logger_id, "*** file not found ***")
+          etl_utils.log(self.logger_id, f"*** file not found ***")
           return []
         etl_utils.log(self.logger_id, f"File {self.xml_filename}")
         self.fp  = open( self.xml_filename )
@@ -100,12 +105,21 @@ class ETL_IN:
 
     if self.config['C_TYPE'] == "sql":
       if self.sql_is_open == False:
-        self.cur.arraysize = self.sql_arraysize
-        etl_utils.log(self.logger_id,  "Opening Cursor on DB...")
-        self.cur.execute(self.sql_query)
-        etl_utils.log(self.logger_id,  "Open Success...")
+        if "ibm" not in self.db_type:
+          self.cur.arraysize = 5000
+          etl_utils.log(self.logger_id,  f"DB Executing...")
+          self.cur.execute(self.sql_query)
+          etl_utils.log(self.logger_id,  f"DB Open Success...")
+        else:
+          self.sql_stmt_db2 = ibm_db.exec_immediate(self.db, self.sql_query)
+
         self.sql_is_open = True
-      return self.cur.fetchmany( self.sql_arraysize )
+
+      if "ibm" not in self.db_type:
+        return self.cur.fetchmany( self.sql_arraysize )
+      else:
+        x = ibm_db.fetchmany(self.sql_stmt_db2, self.sql_arraysize)
+        return [] if x == None else x
 
     # ----------------------------------------
     # executa entrada para arquivos csv
@@ -113,7 +127,7 @@ class ETL_IN:
 
     if self.config['C_TYPE'] == "filename":
       if self.filename_file_required == False and os.path.isfile(self.filename) == False:
-        etl_utils.log(self.logger_id, "*** file not found ***")
+        etl_utils.log(self.logger_id, f"*** file not found ***")
         return []
 
       if self.fp == None:

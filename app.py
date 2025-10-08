@@ -700,6 +700,8 @@ def job_designer():
 
 @app.route("/")
 def index():
+    eu.load_globals() 
+
     if not session.get("status_login"):
         return redirect("/login")
         
@@ -722,4 +724,4 @@ def index():
 #######################################################################################
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0",port=8080)
+    app.run()

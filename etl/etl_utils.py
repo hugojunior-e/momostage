@@ -1,17 +1,14 @@
 import oracledb
 import mysql.connector
-import jaydebeapi
 import json
 import uuid
 import os
 import requests
-import time
 import snowflake.connector
 import redshift_connector
-import threading
-
+import ibm_db
+import concurrent.futures
 from datetime import datetime
-from multiprocessing import Manager
 
 oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_12")
 
@@ -261,6 +258,9 @@ begin
 end;
 """
 
+
+CONSTANT_GLOBALS_parameters = {}
+
 #=======================================================================================================
 #
 #=======================================================================================================
@@ -273,67 +273,80 @@ def local_db():
 #
 #=======================================================================================================
 
+def load_globals():
+  global CONSTANT_GLOBALS_parameters
+  db  = local_db()
+  cur = db.cursor()
+  cur.execute( f"SELECT group_name, param_name, param_value FROM {CONSTANT_OWNER}.ms_job_globals" )
+  dados = cur.fetchall()
 
-def connect_db(dbname):
-  dados = json.loads(get_param_value("DATABASES", dbname.upper()))
-  
-  if "oracle" in dados['dbtype']:
-    return oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dados['tns'])
+  conf = {}
+  for group_name, param_name, param_value in dados:
+        if group_name not in conf:
+              conf[group_name] = {}
 
-  if "mysql" in dados['dbtype']:
-    return mysql.connector.connect(host=dados['host'],port=3306,user=dados['usr'],password=dados['pwd'],database=dados['database'])
+        conf[group_name][param_name] = param_value
+  CONSTANT_GLOBALS_parameters = conf
+  cur.close()
+  db.close()
 
-  if "redshift" in dados['dbtype']:
-    return redshift_connector.connect( host=dados['host'],database=dados['database'],port=5439,user=dados['usr'],password=dados['pwd'],  timeout=60)
-  
-  if "db2" in dados['dbtype']:
-    jars = ['/app_etl/etl/db2jcc-db2jcc4.jar']
+#=======================================================================================================
+#
+#=======================================================================================================
 
-    return jaydebeapi.connect(
-        'com.ibm.db2.jcc.DB2Driver',
-        f"jdbc:db2://{dados['tns']}",
-        [dados['usr'], dados['pwd']],
-        jars
-    )
 
-  if "snowflake" in dados['dbtype']:
-    private_key_path = "/app_etl/rsa_key_algaretl.der"
+def connect_db(dbname, timeout=10):
+  def _do_connect():
+    dados = json.loads(get_param_value("DATABASES", dbname.upper()))
+    con   = None
 
-    with open(private_key_path, "rb") as key_file:
-        private_key = key_file.read()
+    if "oracle" in dados['dbtype']:
+      con = oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dados['tns'])
 
-    return snowflake.connector.connect(
-        user=dados.get('user'),
-        account=dados.get('account'),
-        private_key=private_key,
-        warehouse=dados.get('warehouse'),
-        database=dados.get('database'),
-        schema=dados.get('schema'),
-        role=dados.get('role')
-    )  
-  return None
+    if "mysql" in dados['dbtype']:
+      con = mysql.connector.connect(host=dados['host'],port=3306,user=dados['usr'],password=dados['pwd'],database=dados['database'])
+
+    if "redshift" in dados['dbtype']:
+      con = redshift_connector.connect( host=dados['host'],database=dados['database'],port=5439,user=dados['usr'],password=dados['pwd'],  timeout=60)
+    
+    if "db2" in dados['dbtype']:
+      con = ibm_db.connect( f"DATABASE={ dados['database'] };HOSTNAME={ dados['host'] };PORT={ dados['port'] };PROTOCOL=TCPIP;UID={ dados['usr'] };PWD={ dados['pwd'] };", "", "")
+
+    if "snowflake" in dados['dbtype']:
+      private_key_path = "/app_etl/rsa_key_algaretl.der"
+
+      with open(private_key_path, "rb") as key_file:
+          private_key = key_file.read()
+
+      con = snowflake.connector.connect(
+          user=dados.get('user'),
+          account=dados.get('account'),
+          private_key=private_key,
+          warehouse=dados.get('warehouse'),
+          database=dados.get('database'),
+          schema=dados.get('schema'),
+          role=dados.get('role')
+      )  
+    return con
+
+  with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+      future = executor.submit(_do_connect)
+      try:
+          return future.result(timeout=timeout)
+      except concurrent.futures.TimeoutError:
+          raise TimeoutError(f"Conexão com o banco '{dbname}' excedeu {timeout}s")  
+
+
 
 def diff_date(d1, d2):
    x = str( d1 - d2 ) 
    return x.split(".")[0]
 
-def get_logger_id():
-  db = local_db()
-  cur = db.cursor()
-  cur.execute( f"select {CONSTANT_OWNER}.ms_job_logger_id_seq.nextval from dual" )
-  ret = cur.fetchone()[0]
-  cur.close()
-  db.close()
-  return ret
 
 def get_param_value(group_name, param_name):
-  db = local_db()
-  cur = db.cursor()
-  cur.execute(f"""SELECT param_value FROM {CONSTANT_OWNER}.ms_job_globals where group_name = '%s' and param_name = '%s' """ % (group_name, param_name))
-  ret = cur.fetchone()[0]
-  cur.close()
-  db.close()
-  return ret
+  global CONSTANT_GLOBALS_parameters  
+  return CONSTANT_GLOBALS_parameters[group_name][param_name]
+
 
 def get_tmp_dir():
     return "/app/temp"
@@ -355,7 +368,7 @@ def update_batch_status(batch_id, job_name, status):
 
 
 def create_job_batch(job_name, created_by, managed_by, parameters):
-    db = local_db()
+    db  = local_db()
     cur = db.cursor()
     id  = cur.var(int)
     cur.execute( CONSTANT_SQL_JOB_BATCH_CREATE%( job_name, created_by, managed_by, parameters ), id=id )
@@ -394,14 +407,14 @@ def clean_and_convert_tuples(data, remove_chars=None):
 #=======================================================================================================
 
 LOG_print      = None
-LOG_MAP        = {}
-
 
 def log(logger_id, msg, logbigdata=""):
+  msg_log = "-"
+  
   try:
-    job_name    = LOG_MAP[logger_id]['job_name']
-    batch_id    = LOG_MAP[logger_id]['batch_id']
-    log_prefix  = LOG_MAP.get( f"th_{ os.getpid() }"  )
+    job_name    = logger_id.get('job_name')
+    batch_id    = logger_id.get('batch_id')
+    log_prefix  = logger_id.get( f"th_{ os.getpid() }"  )
 
     if log_prefix == None:
         log_prefix = ""
@@ -409,20 +422,16 @@ def log(logger_id, msg, logbigdata=""):
     if msg == "#":
         msg = "-" * 50
 
-    msg_log = f'{ datetime.now().strftime("%m/%d/%Y %H:%M:%S") }:[{job_name}]: {log_prefix}{msg}'
+    msg_log = f'{ datetime.now().strftime("%d/%m/%Y %H:%M:%S") }:[{job_name}]: {log_prefix}{msg}'
 
     with open( f"{get_log_dir()}/{batch_id}.log", "a") as arq:
        arq.write( f"{msg_log}\n" )
        if len(logbigdata) > 1:
-         arq.write( f'{ datetime.now().strftime("%m/%d/%Y %H:%M:%S") }:[{job_name}]: [BIGDATA]: {log_prefix}{  json.dumps({msg:logbigdata})   }\n'   )
-  except:
-    pass
+         arq.write( f'{ datetime.now().strftime("%d/%m/%Y %H:%M:%S") }:[{job_name}]: [BIGDATA]: {log_prefix}{  json.dumps({msg:logbigdata})   }\n'   )
+  except Exception as e:
+    print( str(e) )
   
-  if LOG_print:
-    LOG_print(f'[{job_name}]: {msg}')  
-  else:     
-    print( msg_log )  
-
+  print( msg_log )
 
 #=======================================================================================================
 # envio de sms
@@ -477,3 +486,13 @@ def human_readable_size(size_bytes):
         size_bytes /= 1024.0
         i += 1
     return f"{size_bytes:.2f} {units[i]}"
+
+
+def kill_pids(list_pids, logger_id = None):
+  for x in list_pids:
+    try:
+      os.kill(x.pid, 9)
+      if logger_id:
+         log(logger_id, f"Killed PID { x.pid }" )
+    except Exception as e:
+      pass

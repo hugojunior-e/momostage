@@ -14,25 +14,35 @@
 			});
 		}
 
+		function jsCheckAbort(x) {
+			ajax("/info", { "name": "check_abort", "batch_id":x, "sql_pars": [] }, function (a) {
+				alert( a.message );
+				window.location.reload();
+			}, null);
+
+		}
+
 		function list_process_running() {
 
-			ajax("/info", { "name": "memory", "sql_pars": [] }, function (a) {
-				document.all.id_memory.innerHTML = a.message;
+			ajax("/info", { "name": "dashboard_index", "sql_pars": [] }, function (a) {
+				document.all.id_memory.innerHTML = a.memory.message;
 				document.all.id_memory.querySelectorAll("table")[0].className = 'table_detail';
-			}, null);
 
-			ajax("/info", { "name": "process_running", "sql_pars": [] }, function (a) {
-				document.all.id_process_running.innerHTML = a.message;
+				document.all.id_process_running.innerHTML = a.process_running.message;
 				document.all.id_process_running.querySelectorAll("table")[0].className = 'table_detail';
-			}, null);
 
-			ajax("/info", { "name": "process_aborted", "sql_pars": [] }, function (a) {
-				document.all.id_process_aborted.innerHTML = a.message;
+
+				document.all.id_process_aborted.innerHTML = a.process_aborted.message;
 				document.getElementById('id_table_proc').className = 'table_detail';
 				document.getElementById('id_table_proc').querySelectorAll("tr").forEach( (row, index) => {
 					if ( index > 0 ) {
-						if (row.cells[5].innerHTML != "ALGARSCHEDULER") {
+						if (row.cells[4].innerHTML != "ALGARSCHEDULER") {
 							row.cells[1].innerHTML = '<a href="/designer?job_name=' + row.cells[1].innerHTML + '" target=__blank>' + row.cells[1].innerHTML + '</a>';
+						}
+
+						row.cells[6].innerHTML = "-";
+						if (row.cells[0].innerHTML == "A") {
+							row.cells[6].innerHTML = '<a href=# onclick=jsCheckAbort(' + row.cells[2].innerHTML + ')>check</a>';
 						}
 
 						row.cells[2].innerHTML = '<a href=/logger?batch_id=' + row.cells[2].innerHTML + ' target=LOGG>' + row.cells[2].innerHTML + '</a>';
@@ -40,8 +50,10 @@
 						if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = "🟥";
 						if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = "🔷";
 						if (row.cells[0].innerHTML == "K") row.cells[0].innerHTML = "❌";
+
 					}
-				})
+				});				
+
 			}, null);
 		}
 

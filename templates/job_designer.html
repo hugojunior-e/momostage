@@ -425,6 +425,17 @@
                         </select>                        
                       </td> 
                 </tr>
+                <tr>
+                      <td>ArraySize</td>
+                      <td> 
+                        <select id="C_SQL_ARRAYSIZE">
+                            <option value="5000">Default(5000)</option>
+                            <option value="20000">20000</option>
+                            <option value="50000">50000</option>
+                            <option value="100000">100000</option>
+                        </select>                        
+                      </td> 
+                </tr>                
 
                 <tr valign="top">
                     <td >SQL</td><td><textarea id="C_SQL" rows="5" cols="80"></textarea></td>
@@ -453,8 +464,8 @@
         </h2>
             <table >
                 <tr><td>Project</td><td><select id="P_NEWJOB_PROJECT"></select></td> </tr>
-                <tr><td>Folder</td><td><input type="text" id="P_NEWJOB_FOLDER" oninput="this.value = this.value.toUpperCase();"></td> </tr>
-                <tr><td>Job Name</td><td><input type="text" id="P_NEWJOB_NAME" oninput="this.value = this.value.toUpperCase();" value="{{job_name}}"></td></tr>
+                <tr><td>Folder</td><td><input type="text" id="P_NEWJOB_FOLDER"  oninput="this.value = this.value.toUpperCase();"></td> </tr>
+                <tr><td>Job Name</td><td><input type="text" id="P_NEWJOB_NAME"  oninput="this.value = this.value.toUpperCase();" value="{{job_name}}"></td></tr>
                 <tr><td colspan="2"><button onclick="js_job_save_new()">Save</button></td> </tr>
             </table>
         </div>  
