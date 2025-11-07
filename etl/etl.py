@@ -39,29 +39,46 @@ class ETL:
   #
   #=======================================================================================================
 
+  def process_last_time(self, l_timeout, index, finished=False):
+    if l_timeout != None:
+      l_timeout[index] = { "dt":time.time(), "finished":finished }
 
-  def run_job_thread( self, m_resto=0, m_qtd=1 ):
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
+  def process_run( self, m_resto=0, m_qtd=1, l_timeout=None):
+    self.process_last_time(l_timeout, m_resto)
+
     if m_qtd > 1:
       self.logger_id[ f"th_{ os.getpid() }" ] = f"INST=[{m_resto}/{m_qtd}] "
       etl_utils.log(self.logger_id,  f"PID=[{ os.getpid() }] - PPID=[{ os.getppid()  }]" )
 
-    etapa      = "run_job_thread"
+    self.process_last_time(l_timeout, m_resto)
+
+    etapa      = "process_run"
     try:
       etl_utils.log(self.logger_id, "Preparing inputs.")
       inn       = etl_in.ETL_IN(self.config_orig,logger_id=self.logger_id, m_qtd=m_qtd, m_resto=m_resto)
+      
+      self.process_last_time(l_timeout, m_resto)
 
       etl_utils.log(self.logger_id, "Preparing outputs.")
       l_saidas  = []
       for idx in range( self.config_target['C_OUT_COUNT'] ):
         ss = etl_out.ETL_OUT(idx, self.config_target,m_resto,logger_id=self.logger_id)
         l_saidas.append(ss)
+      
+      self.process_last_time(l_timeout, m_resto)
 
       etl_utils.log(self.logger_id, "Loading hasheds.")
       lookups = {}
       for r in self.c_hasheds.strip().split("\n"):
         if len(r) > 1:
           lookups[ os.path.basename(r) ] = etl_hash.ETL_HASH( r )
-            
+
+      self.process_last_time(l_timeout, m_resto)      
+
       qtd  = 0
       while True:
         etapa = "Loading Data..."
@@ -75,6 +92,8 @@ class ETL:
         if qtd % 250000 == 0:
           etl_utils.log(self.logger_id,  f"qtd_parc={qtd:,}")
 
+        self.process_last_time(l_timeout, m_resto)
+
         etapa = "Transforming..."
         x   = self.transform(dados, lookups)
 
@@ -87,6 +106,7 @@ class ETL:
       for saida in l_saidas:
         saida.finishing()
 
+      self.process_last_time(l_timeout, m_resto,finished=True)
       return (0,"SUCESSO")
     except Exception as e:
       MSG = f"POINT: {etapa} MSG: {str(e)}"
@@ -119,26 +139,54 @@ class ETL:
 
     if qtd_mod == 1:
       etl_utils.log(self.logger_id,  f"Executing Job...Start")
-      statusCode, statusMsg = self.run_job_thread()
+      statusCode, statusMsg = self.process_run()
       etl_utils.log(self.logger_id,  f"Executing Job...Finish - { statusCode }")
 
       if statusCode == -1:
         raise Exception(statusMsg)
       
     else:
-      #agora = time.time()
+      list_proc = multiprocessing.Manager().list()
       etl_utils.log(self.logger_id,  f"ID(master) = [{ os.getpid() }]" )
 
       l_thread      = []
 
       for i in range(qtd_mod):
-        t        = multiprocessing.Process(target=self.run_job_thread, args=(i,qtd_mod,) )
-        t.index  = i
+        list_proc.append( {"dt":time.time(), "finished":False } )
+        t             = multiprocessing.Process(target=self.process_run, args=(i,qtd_mod,list_proc,) )
+        t.index       = i
+        t.first_start = True
         l_thread.append(t)
         t.start()
+        time.sleep(2)
 
       while len(l_thread) > 0:
-        for x in l_thread:
+        for idx_x, x in enumerate(l_thread):
+
+          # Check timeout
+          if ( time.time() - list_proc[x.index].get("dt") ) > etl_utils.CONSTANT_TIMEOUT_THREAD:
+            # Timeout reached
+            if x.first_start == True:
+              etl_utils.kill_pids( [ x ] , logger_id = self.logger_id)
+              etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } First timeout reached. Extending time..." )
+
+              tt                 = multiprocessing.Process(target=self.process_run, args=( x.index,qtd_mod,list_proc, ) )
+              tt.index           = x.index
+              tt.first_start     = False
+              tt.start()
+
+              l_thread[idx_x]  = tt
+              list_proc[idx_x] = { "dt":time.time(), "finished":False }
+
+              continue
+
+            etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } Timeout reached. Killing all threads..." )
+            etl_utils.kill_pids( l_thread , logger_id = self.logger_id)
+            l_thread.clear()
+            if list_proc[x.index].get("finished") == False:
+              raise Exception( f"Thread INDEX: { x.index } Status: TIMEOUT" )
+
+          # Check finished
           if x.is_alive() == False:
             x.join()
             etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } Status: { x.exitcode } " )
@@ -147,8 +195,8 @@ class ETL:
             if x.exitcode != 0:
               etl_utils.kill_pids( l_thread , logger_id = self.logger_id)
               l_thread.clear()
-
               raise Exception( f"Thread INDEX: {x.index} Status: ERROR" )     
+            
         time.sleep(3)
         
     etl_utils.log(self.logger_id, "Executing OUT.after" )
@@ -174,8 +222,13 @@ class ETL:
     return ret
 
 
-  def apply_jsh(self, commands, opt, status=0):
-    if commands != None and status == 0:
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
+
+  def apply_jsh(self, commands, opt):
+    if commands != None:
       results = {}
       exec(commands.read(), results)
       s_sh = results[ "C_JOB_SH_BEFORE" if opt == "job.start" else "C_JOB_SH_AFTER"  ]
@@ -189,23 +242,22 @@ class ETL:
             cmd   = x.strip().split(" ")
             cmd   = " ".join( cmd[1:] )
             r     = etl_utils.execute_on_db(command=cmd, database="SNOWFLAKE")
-            etl_utils.log(self.logger_id, "Executing SNOWFLAKE_EXECUTE: " + r)
+            etl_utils.log(self.logger_id, f"Executing SNOWFLAKE_EXECUTE: {r}" )
 
-          if comando[0] == "#SNOWFLAKE_EXECUTE_VARS":
-            cmd   = x.strip().split(" ")
-            cmd   = " ".join( cmd[1:] )
-            r     = etl_utils.execute_on_db(command=cmd, database="SNOWFLAKE",is_sql=True)
-            etl_utils.log(self.logger_id, "Executing SNOWFLAKE_EXECUTE_VARS: " + r)
-
-            self.global_vars.append(r)
+          if comando[0] == "#WAIT":
+            line_cmd  = x.strip().split(" ")
+            dat       = line_cmd[1]
+            seg       = int( line_cmd[2] )
+            cmd       = " ".join( line_cmd[3:] )
+            r         = etl_utils.execute_wait(command=cmd, database=dat, timesleep=seg)
+            etl_utils.log(self.logger_id, f"Executing #WAIT: {r}" )
 
           if comando[0] == "#DB_EXECUTE_VARS":
             line_cmd  = x.strip().split(" ")
             dat       = line_cmd[1]
             cmd       = " ".join( line_cmd[2:] )
             r         = etl_utils.execute_on_db(command=cmd, database=dat, is_sql=True)
-            etl_utils.log(self.logger_id, "Executing DB_EXECUTE_VARS: " + r)
-
+            etl_utils.log(self.logger_id, f"Executing DB_EXECUTE_VARS: {r}" )
             self.global_vars.append(r)
 
           if comando[0] == "#SMS":
@@ -213,14 +265,18 @@ class ETL:
             phone = cmd[1] 
             msg   = " ".join( cmd[2:] )
             r     = etl_utils.send_sms(phone, msg)
-            etl_utils.log(self.logger_id, "Sending SMS to " + phone + " " + r.text)
+            etl_utils.log(self.logger_id, f"Executing #SMS to {phone}: {r.text}")
 
+  #=======================================================================================================
+  #
+  #=======================================================================================================
 
   def run(self):
     dt_ini     = datetime.now()
     status_ret = 0
     jsh        = ""
-    m          = etl_utils.update_batch_status( self.batch_id , self.job_name  , "E" )
+
+    m  = etl_utils.update_batch_status( self.batch_id , self.job_name  , "E" )
     etl_utils.log(self.logger_id, m)
 
     try:
@@ -313,19 +369,20 @@ class ETL:
 
       
       self.run_job()
+      self.apply_jsh( commands=jsh, opt="job.end" )
+      
     except Exception as e:
       exc_type, exc_value, exc_traceback = sys.exc_info()
       error_line = traceback.extract_tb(exc_traceback)[-1].lineno      
-      error_file = traceback.extract_tb(exc_traceback)[-1].filename      
-      etl_utils.log(self.logger_id, f"ERROR: {str(e)}"  )
+      error_file = traceback.extract_tb(exc_traceback)[-1].filename
+      error_text = str(e).replace("\n", " ")
+      etl_utils.log(self.logger_id, f"ERROR: { error_text }"  )
       etl_utils.log(self.logger_id, f"ERROR: Details# file:{error_file} line_error:{error_line}"   )
       status_ret = 1
-
-    self.apply_jsh( commands=jsh, opt="job.end", status=status_ret )
     
     m = etl_utils.update_batch_status( self.batch_id  , self.job_name , ("F" if status_ret == 0 else "A")  )
     etl_utils.log(self.logger_id, m )
-    
+
     etl_utils.log(self.logger_id, "Time Elapsed: " + etl_utils.diff_date(datetime.now() , dt_ini ) )
     etl_utils.log(self.logger_id, f"STATUS:{ 'OK' if status_ret == 0 else 'ERRO'}")
     return status_ret

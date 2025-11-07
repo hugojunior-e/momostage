@@ -38,11 +38,13 @@ class ETL_IN:
 
       arsize             = self.config.get('C_SQL_ARRAYSIZE')
       self.sql_arraysize = int( arsize ) if arsize != None else 5000
-        
-      etl_utils.log(self.logger_id,  f"DB Opening...{self.sql_arraysize}")
-      self.db      = etl_utils.connect_db( self.config['C_SQL_DB'] )
+
+      AUX = self.config['C_SQL_DB'] 
+
+      etl_utils.log(self.logger_id,  f"DB: { AUX } : Opening : {self.sql_arraysize}")
+      self.db      = etl_utils.connect_db( AUX )
       self.db_type = str(type(self.db)).lower().replace("<class '","").replace("'>","")
-      etl_utils.log(self.logger_id,  f"DB Opening...{ self.db_type }")
+      etl_utils.log(self.logger_id,  f"DB: { AUX } : success : { self.db_type }")
 
       if "ibm" not in self.db_type:
         self.cur           = self.db.cursor()

@@ -80,6 +80,10 @@
 						e.cells[0].value      = e.cells[0].innerHTML;
 						e.cells[0].innerHTML  = "<a href=# onclick=jsEdit(" + idx + ") >edit</a>";
 
+						e.cells[2].value      = e.cells[2].innerHTML;
+						e.cells[2].innerHTML  = '<a href="/designer?job_name=' + e.cells[2].value + '" target=__blank>' + e.cells[2].value + '</a>';
+						
+
 						e.cells[3].value      = e.cells[3].innerHTML;
 						e.cells[3].innerHTML  = "[...]";
 					}

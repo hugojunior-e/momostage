@@ -15,9 +15,9 @@ from datetime import datetime
 app                 = Flask(__name__)
 
 # ---------------- Configuration ----------------
-app.config["SESSION_PERMANENT"] = False     # Sessions expire when browser closes
-app.config["SESSION_TYPE"] = "filesystem"   # Store session data on the filesystem
-app.config["SESSION_FILE_DIR"] = "/opt/apache2/run"
+app.config["SESSION_PERMANENT"] = False          # Sessions expire when browser closes
+app.config["SESSION_TYPE"]      = "filesystem"   # Store session data on the filesystem
+app.config["SESSION_FILE_DIR"]  = "/app/cache"
 
 Session(app)
 # ---------------- /Configuration ---------------
@@ -212,35 +212,38 @@ def job_info_process_running():
         is_as      = (" ".join(proc.cmdline())).lower().__contains__("algar_prd_execgen")
         is_mms     = (" ".join(proc.cmdline())).lower().__contains__("job_execute")
         
+        pid            = proc.info['pid'] 
+        ppid           = proc.info['ppid']
+        cpu_percent    = proc.info['cpu_percent'] 
+        memory_percent = proc.info['memory_percent']
+
         if is_mms or is_as:
             pid_kill = ""
             pid_show = ""
-            pai      = proc.info['ppid'] == 1
             pid_link = ""
 
-            if pai:
-                pid_kill = f"""<a href=# onclick="jsKillProcess('{ proc.info['pid'] }')">kill</a>"""
-                pid_link = f"<a href=# onclick=jsShowPidDetail({  proc.info['pid']  })> show </a>"
-            elif is_as:
-                pass
-            else:
-                pid_show = f""" id=pid{ proc.info['ppid'] } style="display:none" """
+            if is_mms and ppid > 1:
+                pid_show = f""" id=pid{ ppid } style="display:none" """
             
-            mem     = ( f"{ proc.info['memory_percent'] }" ).split(".")
+            mem     = ( f"{ memory_percent }" ).split(".")
             mem_fmt = mem[0] + "." + mem[1][0:2]
             name_pc = " ".join(proc_cmd[2 if is_mms else 3:])
+
+            if " " in name_pc:
+                pid_kill = f"""<a href=# onclick="jsKillProcess('{ pid }')"   > kill </a>"""
+                pid_link = f"""<a href=# onclick="jsShowPidDetail({  pid  })" > show </a>"""
 
             if name_pc not in lista_as:
                 tabela = f"""
                     {tabela}
                     <tr {pid_show}> 
-                        <td>{ proc.info['pid']  }</td>
-                        <td>{ proc.info['ppid'] }</td>
-                        <td>{ start_time        }</td>
-                        <td>{ mem_fmt } </td>
-                        <td>{ proc.info['cpu_percent']    }</td>
-                        <td>{name_pc }</td>
-                        <td>{pid_kill} {pid_link}</td>
+                        <td>{ pid          }</td>
+                        <td>{ ppid         }</td>
+                        <td>{ start_time   }</td>
+                        <td>{ mem_fmt      }</td>
+                        <td>{ cpu_percent  }</td>
+                        <td>{ name_pc      }</td>
+                        <td>{ pid_kill} {pid_link}</td>
                     </tr>
                 """
                 if is_as:
@@ -326,7 +329,7 @@ def job_info_logger_batch_id():
                         log_data[job_name] = ("" if job_val == None else job_val ) + job_line
 
         for x in log_data:
-            ret = ret + "<hr>" + x + "<hr>" + log_data[x]
+            ret = ret + f"<hr><a href=/designer?job_name={x} target=__blank>{x}</a><hr>" + log_data[x]
     else:
         ret = "Logfile not found!"
         

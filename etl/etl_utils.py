@@ -1,13 +1,15 @@
 import oracledb
 import mysql.connector
 import json
+import time
 import uuid
 import os
 import requests
 import snowflake.connector
 import redshift_connector
 import ibm_db
-import concurrent.futures
+import multiprocessing
+import functools
 from datetime import datetime
 
 oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_12")
@@ -45,16 +47,18 @@ CONSTANT_SQL_JOB_BATCH_STATUS_UPDATE = f"""
                          from {CONSTANT_OWNER}.ms_job_batch b1, 
                               {CONSTANT_OWNER}.ms_job_sequence s1,
                               (
-                                      select order_pri, order_sec
+                                    select order_pri, order_sec
                                       from {CONSTANT_OWNER}.ms_job_batch b, 
                                            {CONSTANT_OWNER}.ms_job_sequence s
-                                      where b.id = v_id
-                                      and b.job_name = v_job_name
-                                      and s.SEQ_NAME = b.MANAGED_BY       
+                                     where b.id = v_id
+                                       and b.job_name = v_job_name
+                                       and s.SEQ_NAME = b.MANAGED_BY       
+                                       and s.job_name = b.job_name
                               ) od
-                        where b1.id = v_id
-                          and b1.MANAGED_BY = s1.SEQ_NAME
+                        where b1.id         = v_id
                           and b1.STATUS     = 'P'
+                          and s1.SEQ_NAME   = b1.MANAGED_BY
+                          and s1.job_name   = b1.job_name
                           and s1.ORDER_PRI  = od.order_pri
                           and s1.ORDER_SEC >= od.order_sec
                      );      
@@ -119,7 +123,7 @@ SELECT transf,
 """
 
 CONSTANT_QTD_THREADS = 5
-
+CONSTANT_TIMEOUT_THREAD = 300  # segundos
 
 AS_GERA_LOTE = f"""
 DECLARE
@@ -246,18 +250,8 @@ select job_name, R_ID from
 """
 
 AS_VERIFICA_PENDENTES = f"""
-  select count(1) from {CONSTANT_OWNER}.ms_job_batch where id = $p_lote_id$ and status <> 'F'
+  select count(1) from {CONSTANT_OWNER}.ms_job_batch where id = $p_lote_id$ and status not in ('K', 'F')
 """
-
-AS_ATUALIZA_FINAL = f"""
-begin
-  update {CONSTANT_OWNER}.ms_job_batch 
-     set status = 'K'
-   where id = $p_lote_id$ and status not in ( 'F', 'A', 'AC' );
-  commit; 
-end;
-"""
-
 
 CONSTANT_GLOBALS_parameters = {}
 
@@ -290,52 +284,88 @@ def load_globals():
   cur.close()
   db.close()
 
+
 #=======================================================================================================
 #
 #=======================================================================================================
 
 
-def connect_db(dbname, timeout=10):
-  def _do_connect():
-    dados = json.loads(get_param_value("DATABASES", dbname.upper()))
-    con   = None
+def timeout(seconds=10, msg_on_error="Tempo limite atingido"):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            q = multiprocessing.Queue()
 
-    if "oracle" in dados['dbtype']:
-      con = oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dados['tns'])
+            def target():
+                try:
+                    q.put(func(*args, **kwargs))
+                except Exception as e:
+                    q.put(e)
 
-    if "mysql" in dados['dbtype']:
-      con = mysql.connector.connect(host=dados['host'],port=3306,user=dados['usr'],password=dados['pwd'],database=dados['database'])
+            p = multiprocessing.Process(target=target)
+            p.start()
+            p.join(seconds)
 
-    if "redshift" in dados['dbtype']:
-      con = redshift_connector.connect( host=dados['host'],database=dados['database'],port=5439,user=dados['usr'],password=dados['pwd'],  timeout=60)
-    
-    if "db2" in dados['dbtype']:
-      con = ibm_db.connect( f"DATABASE={ dados['database'] };HOSTNAME={ dados['host'] };PORT={ dados['port'] };PROTOCOL=TCPIP;UID={ dados['usr'] };PWD={ dados['pwd'] };", "", "")
+            if p.is_alive():
+                p.terminate()
+                raise TimeoutError(msg_on_error)
 
-    if "snowflake" in dados['dbtype']:
-      private_key_path = "/app_etl/rsa_key_algaretl.der"
+            result = q.get() if not q.empty() else None
+            if isinstance(result, Exception):
+                raise result
+            return result
+        return wrapper
+    return decorator
 
-      with open(private_key_path, "rb") as key_file:
-          private_key = key_file.read()
+#=======================================================================================================
+#
+#=======================================================================================================
 
-      con = snowflake.connector.connect(
-          user=dados.get('user'),
-          account=dados.get('account'),
-          private_key=private_key,
-          warehouse=dados.get('warehouse'),
-          database=dados.get('database'),
-          schema=dados.get('schema'),
-          role=dados.get('role')
-      )  
-    return con
+def _do_connect_(dbname,timeout=10):
+  dados   = json.loads(get_param_value("DATABASES", dbname.upper()))
+  con     = None
 
-  with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-      future = executor.submit(_do_connect)
-      try:
-          return future.result(timeout=timeout)
-      except concurrent.futures.TimeoutError:
-          raise TimeoutError(f"Conexão com o banco '{dbname}' excedeu {timeout}s")  
+  if "oracle" in dados['dbtype']:
+    dsn            = f"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST={dados['host']})(PORT={dados['port']})(CONNECT_TIMEOUT={timeout}))(CONNECT_DATA=(SERVICE_NAME={dados['database']})))"
+    con            = oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dsn, tcp_connect_timeout=timeout)
 
+  if "mysql" in dados['dbtype']:
+    con = mysql.connector.connect(
+       host=dados['host'],
+       port=3306,
+       user=dados['usr'],
+       password=dados['pwd'],
+       database=dados['database'],
+       connection_timeout=timeout)
+
+  if "redshift" in dados['dbtype']:
+    con = redshift_connector.connect( host=dados['host'],database=dados['database'],port=5439,user=dados['usr'],password=dados['pwd'],  timeout=60)
+  
+  if "db2" in dados['dbtype']:
+    con = ibm_db.connect( f"DATABASE={ dados['database'] };HOSTNAME={ dados['host'] };PORT={ dados['port'] };PROTOCOL=TCPIP;UID={ dados['usr'] };PWD={ dados['pwd'] };CONNECTTIMEOUT={timeout}", "", "")
+
+  if "snowflake" in dados['dbtype']:
+    private_key_path = "/app_etl/rsa_key_algaretl.der"
+
+    with open(private_key_path, "rb") as key_file:
+        private_key = key_file.read()
+
+    con = snowflake.connector.connect(
+        user=dados.get('user'),
+        account=dados.get('account'),
+        private_key=private_key,
+        warehouse=dados.get('warehouse'),
+        database=dados.get('database'),
+        schema=dados.get('schema'),
+        role=dados.get('role'),
+        login_timeout=timeout
+    )  
+  return con
+
+
+#@timeout(seconds=15)        
+def connect_db(dbname):
+  return _do_connect_(dbname,10)
 
 
 def diff_date(d1, d2):
@@ -406,7 +436,6 @@ def clean_and_convert_tuples(data, remove_chars=None):
 # tratativa de log
 #=======================================================================================================
 
-LOG_print      = None
 
 def log(logger_id, msg, logbigdata=""):
   msg_log = "-"
@@ -455,27 +484,38 @@ def send_sms(too, phone):
 #=======================================================================================================
 
 def execute_on_db(command, database, is_sql=False):
-  try:
-    conn   = connect_db(database)
-    cursor = conn.cursor()
-    cursor.execute(command)   
-    
-    if is_sql:
-      result      = cursor.fetchone()
-      columns     = [desc[0] for desc in cursor.description]
-      row_dict    = dict(zip(columns, result))
-      result_json = json.dumps(row_dict, ensure_ascii=False) 
-      cursor.close()
-      conn.close()
-      return result_json
-    else:
-      cursor.close()
-      conn.close()
-
-    return "sucess: " + command
-  except Exception as e:
-    return (f"Error executing on DB: {e}")
+  conn   = connect_db(database)
+  cursor = conn.cursor()
+  cursor.execute(command)   
   
+  if is_sql:
+    result      = cursor.fetchone()
+    columns     = [desc[0] for desc in cursor.description]
+    row_dict    = dict(zip(columns, result))
+    result_json = json.dumps(row_dict, ensure_ascii=False) 
+    cursor.close()
+    conn.close()
+    return result_json
+  else:
+    cursor.close()
+    conn.close()
+
+  return "sucess: " + command
+  
+def execute_wait(command, database,timesleep=10):
+  conn   = connect_db(database)
+  cursor = conn.cursor()
+  cursor.execute(command)   
+  result      = cursor.fetchone()[0]
+  while result > 0:
+    cursor.execute(command)   
+    result      = cursor.fetchone()[0]
+    time.sleep( timesleep )
+    
+  cursor.close()
+  conn.close()
+
+  return "sucess: OK"
     
 def human_readable_size(size_bytes):
     if size_bytes == 0:
