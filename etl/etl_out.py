@@ -142,7 +142,7 @@ class ETL_OUT:
         self.boto3_file_local  = self.boto3NewFileName()
 
         if "gzip" in self.boto3_format:
-          self.fp     = gzip.open(self.boto3_file_local,"wt", newline="", encoding='utf-8')
+          self.fp     = gzip.open(self.boto3_file_local,"wt", newline="", encoding='utf-8', compresslevel=1)
         else:
           self.fp     = open(self.boto3_file_local,"w", newline="", encoding='utf-8')
 

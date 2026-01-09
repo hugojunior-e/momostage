@@ -16,6 +16,8 @@ class ETL_IN:
     self.cur         = None
     self.fp          = None
     self.logger_id   = logger_id
+    self.py_code     = None
+    self.py_code_ret = {"consoleLog": self.consoleLog}
 
     if self.config['C_TYPE'] == "filename":
       self.filename_file_required = self.config['C_FILENAME_FILE_REQUIRED'] == "1"
@@ -61,6 +63,12 @@ class ETL_IN:
     if self.config['C_TYPE'] == "odata":
       self.odata  = etl_odata.ETL_ODATA(self.config,logger_id=logger_id)
 
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
+  def consoleLog(self, msg):
+    etl_utils.log(self.logger_id, msg)    
 
   #=======================================================================================================
   #
@@ -100,6 +108,15 @@ class ETL_IN:
     if self.config['C_TYPE'] == "odata":
       return self.odata.get_data()
 
+    # ----------------------------------------
+    # executa entrada para py
+    # ----------------------------------------
+
+    if self.config['C_TYPE'] == "py":
+      if self.py_code is None:
+        self.py_code = self.config["C_PY_CODE"]
+        exec(self.py_code, self.py_code_ret)
+      return self.py_code_ret['getData']()
 
     # ----------------------------------------
     # executa entrada para database
@@ -108,7 +125,8 @@ class ETL_IN:
     if self.config['C_TYPE'] == "sql":
       if self.sql_is_open == False:
         if "ibm" not in self.db_type:
-          self.cur.arraysize = 5000
+          self.cur.arraysize    = 5000
+          self.cur.prefetchrows = 5000
           etl_utils.log(self.logger_id,  f"DB Executing...")
           self.cur.execute(self.sql_query)
           etl_utils.log(self.logger_id,  f"DB Open Success...")

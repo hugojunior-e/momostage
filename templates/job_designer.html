@@ -13,44 +13,44 @@
         //#####################################################################################################
 
         function jsTestConnection() {
-            if ( document.all.C_SQL_DB.value == "" ) {
+            if ( C_SQL_DB.value == "" ) {
                 alert("Select Database first.");
                 return;
             }
 
-            ajax("/info", { "name":"test_connection", "db_name": document.all.C_SQL_DB.value }, function(a) {
+            ajax("/info", { "name":"test_connection", "db_name": C_SQL_DB.value }, function(a) {
                 alert(a.message);
             }, null);
         }
 
 
         function js_job_parameters_ref(opt) {
-            document.all.id_job_def_parameters.style.display = (opt == 1) ? 'block' : '';
+            id_job_def_parameters.style.display = (opt == 1) ? 'block' : '';
         }
 
 
         function js_log_lotes() {
-            document.all.id_view_log.style.display = document.all.id_view_log.style.display == 'block' ? 'hidden' : 'block';
+            id_view_log.style.display = id_view_log.style.display == 'block' ? 'hidden' : 'block';
             
-			ajax("/info", { "name":"log_lotes", "job_name": document.all.P_NEWJOB_NAME.value }, function(a) {
+			ajax("/info", { "name":"log_lotes", "job_name": P_NEWJOB_NAME.value }, function(a) {
                 id_view_log_lotes.innerHTML = a.message;
 			}, null);
         }
 
 
         function js_job_config_sh(opt) {
-                document.all.id_job_sh.style.display = (opt == 1) ? 'block' : '';
+                id_job_sh.style.display = (opt == 1) ? 'block' : '';
         }
 
 
         function js_job_execute(tipo) {
             if ( tipo == 1 ) {
-                document.all.id_job_run.style.display = 'block';
-                var pars                     = document.all.C_JOB_DEF_PARAMETERS.value.trim();
+                id_job_run.style.display = 'block';
+                var pars                     = C_JOB_DEF_PARAMETERS.value.trim();
                 id_job_run_parameters.value  = ( pars.length > 0) ? ( pars + "\n").replaceAll("\n","=\n") : "";
             } else {
 
-                if ( document.all.P_NEWJOB_NAME.value == 'newjob' ) {
+                if ( P_NEWJOB_NAME.value == 'newjob' ) {
                     alert("save the job before running!");
                     return;
                 }
@@ -58,7 +58,7 @@
                 if ( confirm("Can execute?" ) ) {
 
                     ajax("/info", 
-                         { "name":"job_execute", "job_name": document.all.P_NEWJOB_NAME.value, "job_run_parameters": id_job_run_parameters.value }, 
+                         { "name":"job_execute", "job_name": P_NEWJOB_NAME.value, "job_run_parameters": id_job_run_parameters.value }, 
                          function(a) {
                             alert(a.message);
                             id_job_run.style.display = 'none';
@@ -69,7 +69,7 @@
 
 
         function js_job_save_new() {
-            document.all.id_save_job_parameters.style.display = '';
+            id_save_job_parameters.style.display = '';
             setTitles();
         }
         
@@ -79,30 +79,40 @@
         function js_job_save(isNew = false) {
             var attrs_transf = {};
 
-            if ( document.all.P_NEWJOB_NAME.value == 'newjob' || isNew ) {
-                document.all.id_save_job_parameters.style.display = 'block';
+            if ( P_NEWJOB_NAME.value == 'newjob' || isNew ) {
+                 id_save_job_parameters.style.display = 'block';
                 return;
             }
 
-            if ( document.all.P_NEWJOB_NAME.value.length < 2 || document.all.P_NEWJOB_NAME.value == 'newjob' ) {
-                alert('Job Name Cant Empty or "newjob"!');
+            if ( P_NEWJOB_PROJECT.value.length < 5 || 
+                 P_NEWJOB_NAME.value.length < 5    || 
+                 P_NEWJOB_FOLDER.value.length < 3  || 
+                 P_NEWJOB_NAME.value == 'newjob' ) 
+            {
+                alert(" Job Name/Folder/Project Can't Empty or 'newjob'! ");
                 return;
             }
 
-            if ( document.all.P_NEWJOB_FOLDER.value.length < 2 ) {
-                alert('Folder Name Cant Empty!');
+            const lista = ['oracledb', 'cx_Oracle'];
+            const dados = C_PY_CODE.value;
+            const contemAlgum = lista.some(item => dados.includes(item));
+
+            if ( contemAlgum ) 
+            {
+                alert(" Python code can't contain 'oracledb' or 'cx_Oracle' libraries! ");
                 return;
             }
+
                         
-            data = {"job_name"                : document.all.P_NEWJOB_NAME.value,
+            data = {"job_name"                : P_NEWJOB_NAME.value,
                     "job_components"          : g_components.join(","),
-                    "C_JOB_DEF_FOLDERS_NAME"  : document.all.P_NEWJOB_PROJECT.value + "|" + document.all.P_NEWJOB_FOLDER.value,
-                    "C_JOB_SH_BEFORE"         : document.all.C_JOB_SH_BEFORE.value,
-                    "C_JOB_SH_AFTER"          : document.all.C_JOB_SH_AFTER.value,
-                    "C_JOB_DEF_PARAMETERS"    : document.all.C_JOB_DEF_PARAMETERS.value,
-                    "TRANSFORM_DATA"          : document.all.TRANSFORM_DATA.value,
-                    "TRANSFORM_FILTER"        : document.all.TRANSFORM_FILTER.value,
-                    "TRANSFORM_LOOKUPS"       : document.all.TRANSFORM_LOOKUPS.value
+                    "C_JOB_DEF_FOLDERS_NAME"  : P_NEWJOB_PROJECT.value + "|" + P_NEWJOB_FOLDER.value,
+                    "C_JOB_SH_BEFORE"         : C_JOB_SH_BEFORE.value,
+                    "C_JOB_SH_AFTER"          : C_JOB_SH_AFTER.value,
+                    "C_JOB_DEF_PARAMETERS"    : C_JOB_DEF_PARAMETERS.value,
+                    "TRANSFORM_DATA"          : TRANSFORM_DATA.value,
+                    "TRANSFORM_FILTER"        : TRANSFORM_FILTER.value,
+                    "TRANSFORM_LOOKUPS"       : TRANSFORM_LOOKUPS.value
             };
 
             data_populate(data, ['DATASETS'], 'id_dataset');
@@ -117,30 +127,30 @@
 
 
         function js_job_load() {
-            if ( document.all.P_NEWJOB_NAME.value == 'newjob') {
+            if ( P_NEWJOB_NAME.value == 'newjob') {
                     return;    
             }
 
             dados = { 
-                "job_name": document.all.P_NEWJOB_NAME.value, 
+                "job_name": P_NEWJOB_NAME.value, 
                 "job_components":g_components.join(",")
             };
 
             ajax("/job_load", dados, function(forms) {
-                document.all.id_origin.innerHTML        = forms.JOB['origem'];
-                document.all.id_transf.innerHTML        = forms.JOB['transform'];
-                document.all.id_target.innerHTML        = forms.JOB['destino'];
-                document.all.id_dataset.innerHTML       = forms.JOB['dataset'];
-                document.all.TRANSFORM_DATA.value       = forms.TRANSFORM_DATA;
-                document.all.TRANSFORM_FILTER.value     = forms.TRANSFORM_FILTER;
-                document.all.TRANSFORM_LOOKUPS.value    = forms.TRANSFORM_LOOKUPS;
-                document.all.C_JOB_SH_AFTER.value       = forms.C_JOB_SH_AFTER;
-                document.all.C_JOB_SH_BEFORE.value      = forms.C_JOB_SH_BEFORE;
-                document.all.C_JOB_DEF_PARAMETERS.value = forms.C_JOB_DEF_PARAMETERS;
+                id_origin.innerHTML        = forms.JOB['origem'];
+                id_transf.innerHTML        = forms.JOB['transform'];
+                id_target.innerHTML        = forms.JOB['destino'];
+                id_dataset.innerHTML       = forms.JOB['dataset'];
+                TRANSFORM_DATA.value       = forms.TRANSFORM_DATA;
+                TRANSFORM_FILTER.value     = forms.TRANSFORM_FILTER;
+                TRANSFORM_LOOKUPS.value    = forms.TRANSFORM_LOOKUPS;
+                C_JOB_SH_AFTER.value       = forms.C_JOB_SH_AFTER;
+                C_JOB_SH_BEFORE.value      = forms.C_JOB_SH_BEFORE;
+                C_JOB_DEF_PARAMETERS.value = forms.C_JOB_DEF_PARAMETERS;
 
                 var fn = forms.C_JOB_DEF_FOLDERS_NAME.split("|");
-                document.all.P_NEWJOB_PROJECT.value     = fn[0];
-                document.all.P_NEWJOB_FOLDER.value      = fn.slice(1).join("|");
+                P_NEWJOB_PROJECT.value     = fn[0];
+                P_NEWJOB_FOLDER.value      = fn.slice(1).join("|");
 
                 Object.entries(forms).forEach(([key, value]) => {
                         if (key.startsWith("COMP")) {
@@ -248,6 +258,7 @@
             <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer {{menu3}} </div><br>
             <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) {{menu1}}     </div><br>
             <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML {{menu1}}         </div><br>
+            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_py.png    type_obj="py">      <br>PythonCode {{menu2}}  </div><br>
 </center>
 				</div>
     </div>
@@ -328,6 +339,20 @@
             </table>
         </div>  
     </div>    
+
+
+
+    <div id="id_py_edit" class="itools_modal">
+        <div class="itools_modal_content">
+        <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
+        <h2>Python Code</h2>
+            <table >
+               <tr><td>Name</td><td> <input type="text" id="C_PY_NAME"></td> </tr>
+               <tr><td>Code</td><td> <textarea id="C_PY_CODE"></textarea></td> </tr>
+               <tr><td COLSPAN=2><button onclick="jsComponentSave()">Save</button></td> </tr>
+            </table>
+        </div>
+    </div>
 
 
     <div id="id_odata_edit" class="itools_modal">
@@ -514,10 +539,10 @@
 
 
     <script> 
-        fill_combo(document.all.C_BOTO3_BUCKET   , '{{CBO_BOTO3}}'    )
-        fill_combo(document.all.P_NEWJOB_PROJECT , '{{CBO_PROJETOS}}' )
-        fill_combo(document.all.C_SQL_DB         , '{{CBO_DATABASES}}')
-        fill_combo(document.all.C_ODATA_AUTH     , '{{CBO_AUTHS_SAP}}')        
+        fill_combo(C_BOTO3_BUCKET   , '{{CBO_BOTO3}}'    )
+        fill_combo(P_NEWJOB_PROJECT , '{{CBO_PROJETOS}}' )
+        fill_combo(C_SQL_DB         , '{{CBO_DATABASES}}')
+        fill_combo(C_ODATA_AUTH     , '{{CBO_AUTHS_SAP}}')        
 
         js_job_load(); 
         setTitles();

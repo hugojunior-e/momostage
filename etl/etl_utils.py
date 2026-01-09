@@ -414,22 +414,21 @@ def generate_hash(prefix="", with_hash=True):
   return f"{ path_folder }{ os.path.sep }{ prefix }{ hash_sep }{ hash }"
 
 
-def clean_and_convert_tuples(data, remove_chars=None):
-  if remove_chars is None:
-      remove_chars = "\n\t\";"
 
-  def clean_field(field):
-      if isinstance(field, str):
-          for char in remove_chars:
-              field = field.replace(char, "")
-      return field
 
-  result = [
-      [clean_field(field) for field in row]
-      for row in data
-  ]
+REMOVE_TABLE_DEFAULT = str.maketrans("", "", "\n\t\";")
 
-  return result
+def clean_and_convert_tuples(data, remove_table=REMOVE_TABLE_DEFAULT):
+    """
+    Recebe um iterável de linhas (tuples)
+    Retorna um generator de tuples limpas (streaming)
+    """
+
+    for row in data:
+        yield tuple(
+            field.translate(remove_table) if isinstance(field, str) else field
+            for field in row
+        )
 
 
 #=======================================================================================================
