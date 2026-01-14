@@ -134,6 +134,28 @@ textarea {
 }
 
 
+.sidebar {
+    background: linear-gradient(var(--cor-sidebar-bg1), var(--cor-sidebar-bg2));
+    border-right: var(--borda-padrao);
+    overflow: auto;
+    white-space: nowrap;
+    padding: 12px;
+    color: var(--cor-sidebar-fonte);
+    line-height: 1.6em;
+    font-size: 12px;
+}
+
+.sidebar a {
+    color: var(--cor-sidebar-fonte);
+}
+
+.sidebar a:hover {
+    color: var(--cor-acento);
+    transition: color .2s;
+}
+
+
+
 .area img {
   border: 0px;
   height: 18px;

@@ -71,6 +71,19 @@
 			}
 
 		}
+
+		function list_tree_view() {
+				ajax("/info", { "name": "list_treeview" }, function (a) {
+					ret = window.treeview.montaArvoreDados(a.message);
+					id_treeview.innerHTML = ret;
+
+				}, null);
+		}
+
+		function js_open_job(x) {
+			aa = x.split("...")
+			window.open("/designer?job_name=" + aa[ aa.length - 2 ]);
+		}
 	</SCRIPT>
 </head>
 
@@ -89,13 +102,7 @@
 
 	<div class="container">
 		<div class="div-esquerda">
-			<div class="area">
-				<script type="text/javascript">
-					const csvData = `{{treeview}}`.trim();
-					const treeNodes = parseCsvToTreeArray(csvData);
-					createTree(treeNodes);
-				</script>
-			</div>
+			<div class="sidebar" id="id_treeview"></div>
 		</div>
 
 		<div class="div-direita">
@@ -120,7 +127,12 @@
 
 
 	<script>
+		window.treeview = new TreeView();
+		window.treeview.endNodeClick = "js_open_job";
+		window.treeview.endNodeParamClick = "nodeValues[3]";
+
 		list_process_running();
+		list_tree_view();
 		setInterval(list_process_running, 30000);
 	</script>
 </body>

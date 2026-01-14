@@ -1,239 +1,186 @@
-/**************************************************************************
-	Copyright (c) 2001-2003 Geir Landr� (drop@destroydrop.com)
-	JavaScript Tree - www.destroydrop.com/hjavascripts/tree/
-	Version 0.96	
-
-	This script can be used freely as long as all copyright messages are
-	intact.
-**************************************************************************/
-
-// Arrays for nodes and icons
-var nodes			= new Array();;
-var openNodes	= new Array();
-var icons			= new Array(6);
-
-// Loads all icons that are used in the tree
-function preloadIcons() {
-	icons[0] = new Image();
-	icons[0].src = "/static/img/plus.gif";
-	icons[1] = new Image();
-	icons[1].src = "/static/img/plusbottom.gif";
-	icons[2] = new Image();
-	icons[2].src = "/static/img/minus.gif";
-	icons[3] = new Image();
-	icons[3].src = "/static/img/minusbottom.gif";
-	icons[4] = new Image();
-	icons[4].src = "/static/img/folder.gif";
-	icons[5] = new Image();
-	icons[5].src = "/static/img/folderopen.gif";
-}
-// Create the tree
-function createTree(arrName, startNode, openNode) {
-	nodes = arrName;
-	if (nodes.length > 0) {
-		preloadIcons();
-		if (startNode == null) startNode = 0;
-		if (openNode != 0 || openNode != null) setOpenNodes(openNode);
-	
-		if (startNode !=0) {
-			var nodeValues = nodes[getArrayId(startNode)].split("|");
-			document.write("<a href=\"" + nodeValues[3] + "\" onmouseover=\"window.status='" + nodeValues[2] + "';return true;\" onmouseout=\"window.status=' ';return true;\"><img src=\"/static/img/folderopen.gif\" align=\"absbottom\" alt=\"\" />" + nodeValues[2] + "</a><br />");
-		} else document.write("<img src=\"/static/img/base.gif\" align=\"absbottom\" alt=\"\" />Jobs<br />");
-	
-		var recursedNodes = new Array();
-		addNode(startNode, recursedNodes);
-	}
-}
-// Returns the position of a node in the array
-function getArrayId(node) {
-	for (i=0; i<nodes.length; i++) {
-		var nodeValues = nodes[i].split("|");
-		if (nodeValues[0]==node) return i;
-	}
-}
-// Puts in array nodes that will be open
-function setOpenNodes(openNode) {
-	for (i=0; i<nodes.length; i++) {
-		var nodeValues = nodes[i].split("|");
-		if (nodeValues[0]==openNode) {
-			openNodes.push(nodeValues[0]);
-			setOpenNodes(nodeValues[1]);
-		}
-	} 
-}
-// Checks if a node is open
-function isNodeOpen(node) {
-	for (i=0; i<openNodes.length; i++)
-		if (openNodes[i]==node) return true;
-	return false;
-}
-// Checks if a node has any children
-function hasChildNode(parentNode) {
-	for (i=0; i< nodes.length; i++) {
-		var nodeValues = nodes[i].split("|");
-		if (nodeValues[1] == parentNode) return true;
-	}
-	return false;
-}
-// Checks if a node is the last sibling
-function lastSibling (node, parentNode) {
-	var lastChild = 0;
-	for (i=0; i< nodes.length; i++) {
-		var nodeValues = nodes[i].split("|");
-		if (nodeValues[1] == parentNode)
-			lastChild = nodeValues[0];
-	}
-	if (lastChild==node) return true;
-	return false;
-}
-// Adds a new node to the tree
-function addNode(parentNode, recursedNodes) {
-	for (var i = 0; i < nodes.length; i++) {
-
-		var nodeValues = nodes[i].split("|");
-		if (nodeValues[1] == parentNode) {
-			
-			var ls	= lastSibling(nodeValues[0], nodeValues[1]);
-			var hcn	= hasChildNode(nodeValues[0]);
-			var ino = isNodeOpen(nodeValues[0]);
-
-			// Write out line & empty icons
-			for (g=0; g<recursedNodes.length; g++) {
-				if (recursedNodes[g] == 1) document.write("<img src=\"/static/img/line.gif\" align=\"absbottom\" alt=\"\" />");
-				else  document.write("<img src=\"/static/img/empty.gif\" align=\"absbottom\" alt=\"\" />");
-			}
-
-			// put in array line & empty icons
-			if (ls) recursedNodes.push(0);
-			else recursedNodes.push(1);
-
-			// Write out join icons
-			if (hcn) {
-				if (ls) {
-					document.write("<a href=\"javascript: oc(" + nodeValues[0] + ", 1);\"><img id=\"join" + nodeValues[0] + "\" src=\"/static/img/");
-					 	if (ino) document.write("minus");
-						else document.write("plus");
-					document.write("bottom.gif\" align=\"absbottom\" alt=\"Open/Close node\" /></a>");
-				} else {
-					document.write("<a href=\"javascript: oc(" + nodeValues[0] + ", 0);\"><img id=\"join" + nodeValues[0] + "\" src=\"/static/img/");
-						if (ino) document.write("minus");
-						else document.write("plus");
-					document.write(".gif\" align=\"absbottom\" alt=\"Open/Close node\" /></a>");
-				}
-			} else {
-				if (ls) document.write("<img src=\"/static/img/joinbottom.gif\" align=\"absbottom\" alt=\"\" />");
-				else document.write("<img src=\"/static/img/join.gif\" align=\"absbottom\" alt=\"\" />");
-			}
-
-			// Start link
-			var xxx = nodeValues[2];
-			var ccc = "";
-			if ( xxx.endsWith("...") ) {
-				ccc = " target=\"" + xxx + "\" ";
-			}
-			document.write("<a href=/designer?job_name=" + xxx.replaceAll("...","") + ccc + ">");
-			
-			// Write out folder & page icons
-			if (hcn) {
-				document.write("<img id=\"icon" + nodeValues[0] + "\" src=\"/static/img/folder")
-					if (ino) document.write("open");
-				document.write(".gif\" align=\"absbottom\" alt=\"Folder\" />");
-			} else document.write("<img id=\"icon" + nodeValues[0] + "\" src=\"/static/img/page.gif\" align=\"absbottom\" alt=\"Page\" />");
-			
-			// Write out node name
-			document.write(nodeValues[2]);
-
-			// End link
-			document.write("</a><br />");
-			
-			// If node has children write out divs and go deeper
-			if (hcn) {
-				document.write("<div id=\"div" + nodeValues[0] + "\"");
-					if (!ino) document.write(" style=\"display: none;\"");
-				document.write(">");
-				addNode(nodeValues[0], recursedNodes);
-				document.write("</div>");
-			}
-			
-			// remove last line or empty icon 
-			recursedNodes.pop();
-		}
-	}
-}
-// Opens or closes a node
-function oc(node, bottom) {
-	var theDiv = document.getElementById("div" + node);
-	var theJoin	= document.getElementById("join" + node);
-	var theIcon = document.getElementById("icon" + node);
-	
-	if (theDiv.style.display == 'none') {
-		if (bottom==1) theJoin.src = icons[3].src;
-		else theJoin.src = icons[2].src;
-		theIcon.src = icons[5].src;
-		theDiv.style.display = '';
-	} else {
-		if (bottom==1) theJoin.src = icons[1].src;
-		else theJoin.src = icons[0].src;
-		theIcon.src = icons[4].src;
-		theDiv.style.display = 'none';
-	}
-}
-// Push and pop not implemented in IE
-if(!Array.prototype.push) {
-	function array_push() {
-		for(var i=0;i<arguments.length;i++)
-			this[this.length]=arguments[i];
-		return this.length;
-	}
-	Array.prototype.push = array_push;
-}
-if(!Array.prototype.pop) {
-	function array_pop(){
-		lastElement = this[this.length-1];
-		this.length = Math.max(this.length-1,0);
-		return lastElement;
-	}
-	Array.prototype.pop = array_pop;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-// Gera IDs e estrutura hierárquica
-function parseCsvToTreeArray(csv) {
-  const lines = csv.split("\n");
-  const map = {}; // caminho -> id
-  const result = [];
-  let currentId = 1;
-
-  for (let line of lines) {
-    const parts = line.trim().split("|");
-    let path = "";
-    let parentPath = "";
-    let parentId = 0;
-
-    for (let i = 0; i < parts.length; i++) {
-      parentPath = path;
-      path = path ? path + "|" + parts[i] : parts[i];
-
-      if (!(path in map)) {
-        const id = currentId++;
-        map[path] = id;
-        const name = parts[i];
-        const link = parts.slice(0, i + 1).join("...");
-        const parent = map[parentPath] || 0;
-        result.push(`${id}|${parent}|${name}|${link}`);
-      }
+class TreeView {
+    constructor() {
+        this.nodes = [];
+        this.openNodes = [];
+        this.treeBuffer = [];
+        this.endNodeClick = null;
+        this.endNodeParamClick = null;
+        this.endNodeText = null;
     }
-  }
-  return result;
+
+
+    writeTreeString(txt) {
+        this.treeBuffer.push(txt);
+    }
+
+    montaArvoreDados(arrNodes, startNode = 0, openNode = null) {
+        this.treeBuffer = [];
+        this.nodes = this.parseCsvToTreeArray(arrNodes);
+        this.openNodes = [];
+
+        if (this.nodes.length > 0) {
+            if (openNode != 0 && openNode != null) {
+                this.setOpenNodes(openNode);
+            }
+
+            if (startNode !== 0) {
+                const nodeValues = this.nodes[this.getArrayId(startNode)].split("|");
+                this.writeTreeString(
+                    `<a href="${nodeValues[3]}" onmouseover="window.status='${nodeValues[2]}';return true;" onmouseout="window.status=' ';return true;">${nodeValues[2]}</a><br />`
+                );
+            }
+
+            const recursedNodes = [];
+            this.addNode(startNode, recursedNodes);
+        }
+
+        return this.treeBuffer.join("\n");
+    }
+
+    getArrayId(node) {
+        for (let i = 0; i < this.nodes.length; i++) {
+            const values = this.nodes[i].split("|");
+            if (values[0] == node) return i;
+        }
+        return null;
+    }
+
+    setOpenNodes(openNode) {
+        for (let i = 0; i < this.nodes.length; i++) {
+            const nodeValues = this.nodes[i].split("|");
+            if (nodeValues[0] == openNode) {
+                this.openNodes.push(nodeValues[0]);
+                this.setOpenNodes(nodeValues[1]);
+            }
+        }
+    }
+
+    isNodeOpen(node) {
+        return this.openNodes.includes(node);
+    }
+
+    hasChildNode(parentNode) {
+        return this.nodes.some(n => n.split("|")[1] == parentNode);
+    }
+
+    lastSibling(node, parentNode) {
+        let lastChild = 0;
+        for (let i = 0; i < this.nodes.length; i++) {
+            const nodeValues = this.nodes[i].split("|");
+            if (nodeValues[1] == parentNode) {
+                lastChild = nodeValues[0];
+            }
+        }
+        return lastChild == node;
+    }
+
+    addNode(parentNode, recursedNodes) {
+        for (let i = 0; i < this.nodes.length; i++) {
+            const nodeValues = this.nodes[i].split("|");
+            if (nodeValues[1] == parentNode) {
+
+                const ls = this.lastSibling(nodeValues[0], nodeValues[1]);
+                const hcn = this.hasChildNode(nodeValues[0]);
+                const ino = this.isNodeOpen(nodeValues[0]);
+
+                // linhas do layout
+                for (let g = 0; g < recursedNodes.length; g++) {
+                    if (recursedNodes[g] == 1) this.writeTreeString("  ┊");
+                    else this.writeTreeString("&nbsp;&nbsp;&nbsp;");
+                }
+
+                recursedNodes.push(ls ? 0 : 1);
+
+                const vv_div = this.generate_session_id();
+
+                // Nó com filhos
+                if (hcn) {
+                    const isLast = ls ? 1 : 0;
+                    this.writeTreeString(
+                        `<a href="javascript: oc('${vv_div}_${nodeValues[0]}', ${isLast});">➕📁${nodeValues[2]}</a>`
+                    );
+                } else {
+                    // Nó folha
+                    this.writeTreeString("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🔵");
+                    const nodeValue       = nodeValues[2];
+                    let endNodeText       = nodeValue;
+                    let endNodeParameter  = nodeValue;
+
+                    if ( this.endNodeText != null ) {
+                        endNodeText = eval(this.endNodeText);
+                    }
+
+                    if ( this.endNodeParamClick != null ) {
+                        endNodeParameter = eval(this.endNodeParamClick);
+                    }
+
+                    if ( this.endNodeClick != null ) {
+                        this.writeTreeString(
+                            `<a href=# onclick="${this.endNodeClick}('${endNodeParameter}')">${endNodeText}</a>`
+                        );
+                    } else {
+                        this.writeTreeString(endNodeText);
+                    } 
+                }
+
+                this.writeTreeString("<br/>");
+
+                // Se tiver filhos → abre div e recursa
+                if (hcn) {
+                    this.writeTreeString(`<div id="div${vv_div}_${nodeValues[0]}"`);
+                    if (!ino) this.writeTreeString(` style="display: none;"`);
+                    this.writeTreeString(">");
+
+                    this.addNode(nodeValues[0], recursedNodes);
+
+                    this.writeTreeString("</div>");
+                }
+
+                recursedNodes.pop();
+            }
+        }
+    }
+
+    // ID fake como no original
+    generate_session_id() {
+        return Math.random().toString(36).substring(2, 10);
+    }
+
+    // parser CSV → array de strings "id|parent|name|link"
+    parseCsvToTreeArray(csv) {
+        const lines = csv.split("\n");
+        const map = {};
+        const result = [];
+        let currentId = 1;
+
+        for (let line of lines) {
+            const parts = line.trim().split("|");
+            let path = "";
+            let parentPath = "";
+            let parentId = 0;
+
+            for (let i = 0; i < parts.length; i++) {
+                parentPath = path;
+                path = path ? path + "|" + parts[i] : parts[i];
+
+                if (!(path in map)) {
+                    const id = currentId++;
+                    map[path] = id;
+                    const name = parts[i];
+                    const link = parts.slice(0, i + 1).join("...");
+                    const parent = map[parentPath] || 0;
+                    result.push(`${id}|${parent}|${name}|${link}`);
+                }
+            }
+        }
+        return result;
+    }
+
+
+}
+
+// Função global necessária pelo HTML existente
+function oc(node, bottom) {
+    const div = document.getElementById("div" + node);
+    div.style.display = div.style.display == "none" ? "" : "none";
 }

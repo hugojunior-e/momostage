@@ -397,6 +397,16 @@ def job_info_check_abort():
     db_execute(sql,fetch=False)
     return { "message": "OK" }
 
+
+def job_list_treeview():
+    sql     = db_sql("job_treeview")
+    x       = ""
+    for y in db_execute(sql).data:
+        x = x + "\n" + y[0]
+    return { "message": x.strip() }
+
+
+
 def test_connection():
     db_name = request.form.get("db_name")
     if db_name == None or db_name == "":
@@ -451,6 +461,9 @@ def info():
 
     if name == "log_lotes":
         return job_info_logger_lotes()
+    
+    if name == "list_treeview":
+        return job_list_treeview()
 
     if name == "log":
         return job_info_logger()
@@ -715,12 +728,7 @@ def index():
     app.lista_projetos  = [x[0] for x in db_execute(sql.replace("<1>", 'FOLDER_ROOT')).data]
     app.lista_boto3     = [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.S3'   )).data]
 
-    sql     = db_sql("job_treeview")
-    x       = ""
-    for y in db_execute(sql).data:
-        x = x + "\n" + y[0]
-
-    return render_template('index.html', treeview=x.strip(), login=session["status_login"])
+    return render_template('index.html', login=session["status_login"])
 
 
 #######################################################################################
@@ -728,4 +736,4 @@ def index():
 #######################################################################################
 
 if __name__ == "__main__":
-    app.run()
+    app.run(port=7000)

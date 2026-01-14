@@ -12,7 +12,7 @@ import multiprocessing
 import functools
 from datetime import datetime
 
-oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_12")
+oracledb.init_oracle_client()#lib_dir="/opt/oracle/instantclient_21_12")
 
 CONSTANT_OWNER = "DWADM"
 
