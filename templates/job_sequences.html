@@ -11,7 +11,7 @@
 			id_sequence_edit.style.display = 'block';
 			id_sequence_edit.rowid         = tb.rows[idx].cells[0].value;
 			SEQ_NAME.value                 = tb.rows[idx].cells[1].innerHTML;
-			JOB_NAME.value                 = tb.rows[idx].cells[2].innerHTML;
+			JOB_NAME.value                 = tb.rows[idx].cells[2].value;
 			PARAMETERS.value               = tb.rows[idx].cells[3].value;
 			ORDER_PRI.value                = tb.rows[idx].cells[4].innerHTML;
 			ORDER_SEC.value                = tb.rows[idx].cells[5].innerHTML;
@@ -50,7 +50,7 @@
 			}, null);
 		}	
 
-		function jsSave() {
+		function jsSaveRemove(tipo) {
 			dados = {
 				"name"       : "job_sequence_save",
 				"rowid"      : id_sequence_edit.rowid,
@@ -60,6 +60,7 @@
 				"ORDER_PRI"  : ORDER_PRI.value,
 				"ORDER_SEC"  : ORDER_SEC.value,
 				"FL_ACTIVE"  : FL_ACTIVE.checked ? "1" : "0",
+				"action"     : tipo
 			};
 
 			ajax("/info", dados, function (a) {
@@ -131,7 +132,8 @@
                 <tr>
 					<td colspan="2" style="display: flex;justify-content: flex-start;">
 						<hr>
-						<button onclick="jsSave()">Save</button> &nbsp;
+						<button onclick="jsSaveRemove(1)">Save</button> &nbsp;
+						<button onclick="jsSaveRemove(2)">Remove</button> &nbsp;
 					</td> 
 				</tr>
             </table>

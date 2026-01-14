@@ -262,7 +262,8 @@ def job_info_sequence_save():
                 request.form.get("PARAMETERS"),
                 request.form.get("ORDER_PRI"),
                 request.form.get("ORDER_SEC"),
-                request.form.get("FL_ACTIVE")
+                request.form.get("FL_ACTIVE"),
+                request.form.get("action"),
     )
     db_execute(sql, params=pars, fetch=False)
     return { "message": "OK" }
