@@ -125,8 +125,8 @@ class ETL_IN:
     if self.config['C_TYPE'] == "sql":
       if self.sql_is_open == False:
         if "ibm" not in self.db_type:
-          self.cur.arraysize    = 25000
-          self.cur.prefetchrows = 25000
+          self.cur.arraysize    = 10000
+          self.cur.prefetchrows = 10000
           etl_utils.log(self.logger_id,  f"DB Executing...")
           self.cur.execute(self.sql_query)
           etl_utils.log(self.logger_id,  f"DB Open Success...")

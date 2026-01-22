@@ -17,7 +17,9 @@
 		function jsCheckAbort(x) {
 			ajax("/info", { "name": "check_abort", "batch_id":x, "sql_pars": [] }, function (a) {
 				alert( a.message );
-				window.location.reload();
+				ttr = Array.from(id_table_proc.querySelectorAll('a')).filter( eel => eel.innerText.trim() === ("" + x) ) [0];
+				ttr.parentNode.parentNode.remove();
+				//window.location.reload();
 			}, null);
 
 		}
@@ -84,6 +86,32 @@
 			aa = x.split("...")
 			window.open("/designer?job_name=" + aa[ aa.length - 2 ]);
 		}
+
+		function jsFindJob(jb) {
+		  id = document.getElementById('id_no_' + jb.toLowerCase() + '...' );
+		  x  = id.parentNode;
+
+		  while (x.id != 'id_treeview' ) {
+			oc( x.id.substring(3) , 1 )
+			x = x.parentNode;
+		  }
+
+		  id_job_find.style.display = 'none';
+		}
+
+		function jsFindJobList() {
+			ajax("/info", { "name": "tablemodel", "sql": "job_find_all_jobs", "sql_pars": [ id_job_find_name.value ] }, function (a) {
+				id_job_find_list.innerHTML = a.message;
+
+				id_job_find_list.querySelectorAll("tr").forEach((e, idx) => {
+					if (idx > 0) {
+						e.cells[0].value      = e.cells[0].innerHTML;
+						e.cells[0].innerHTML  = "<a href=# onclick=js_open_job('" + e.cells[0].innerHTML + "...') >" + e.cells[0].innerHTML + "</a>";
+					}
+				});
+
+			}, null);
+		}
 	</SCRIPT>
 </head>
 
@@ -103,6 +131,7 @@
 	<div class="container">
 		<div class="div-esquerda">
 			<div class="sidebar" id="id_treeview"></div>
+			<center><a href="#" onclick="id_job_find.style.display = 'block'"> Find Job </a></center>
 		</div>
 
 		<div class="div-direita">
@@ -124,6 +153,15 @@
 	</div>
 
 
+    <div id="id_job_find" class="itools_modal">
+        <div class="itools_modal_content">
+			<span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
+			<h2>Job Find</h2>
+			<input type=text id=id_job_find_name oninput=jsFindJobList()>
+			<hr>
+			<div class="div_pre" id="id_job_find_list"></div>
+        </div>
+    </div>
 
 
 	<script>

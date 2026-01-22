@@ -101,7 +101,7 @@ class TreeView {
                     );
                 } else {
                     // Nó folha
-                    this.writeTreeString("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🔵");
+                    this.writeTreeString("&nbsp;&nbsp;&nbsp;🔵");
                     const nodeValue       = nodeValues[2];
                     let endNodeText       = nodeValue;
                     let endNodeParameter  = nodeValue;
@@ -116,7 +116,7 @@ class TreeView {
 
                     if ( this.endNodeClick != null ) {
                         this.writeTreeString(
-                            `<a href=# onclick="${this.endNodeClick}('${endNodeParameter}')">${endNodeText}</a>`
+                            `<a href=# id=id_no_${endNodeText.toLowerCase()} onclick="${this.endNodeClick}('${endNodeParameter}')">${endNodeText}</a>`
                         );
                     } else {
                         this.writeTreeString(endNodeText);
