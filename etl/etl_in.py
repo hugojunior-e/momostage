@@ -26,7 +26,7 @@ class ETL_IN:
 
 
     if self.config['C_TYPE'] == 'boto3':
-      self.boto3_name        = etl_utils.generate_hash()
+      self.boto3_name        = etl_utils.generate_hash_filename()
       self.boto3_filename    = self.config['C_BOTO3_FILENAME']
       self.boto3_fd          = self.config["C_BOTO3_FD"]
       self.boto3_bucket_data = json.loads( etl_utils.get_param_value("AUTHS.S3", self.config['C_BOTO3_BUCKET'] ) )

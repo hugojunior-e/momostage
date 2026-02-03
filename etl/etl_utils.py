@@ -374,6 +374,7 @@ def diff_date(d1, d2):
 
 
 def get_param_value(group_name, param_name):
+  print(param_name, group_name)
   global CONSTANT_GLOBALS_parameters  
   return CONSTANT_GLOBALS_parameters[group_name][param_name]
 
@@ -407,13 +408,10 @@ def create_job_batch(job_name, created_by, managed_by, parameters):
     db.close()  
     return ret
 
-def generate_hash(prefix="", with_hash=True):
-  hash        = str(uuid.uuid4()) if with_hash else ""
-  hash_sep    = "_" if with_hash and len(prefix) > 0 else ""
-  path_folder = f"{ get_tmp_dir() }"
-  return f"{ path_folder }{ os.path.sep }{ prefix }{ hash_sep }{ hash }"
 
-
+def generate_hash_filename():
+  hash = str(uuid.uuid4()).replace("-","")
+  return f"{ get_tmp_dir() }{ os.path.sep }{ hash }"
 
 
 REMOVE_TABLE_DEFAULT = str.maketrans("", "", "\n\t\";")

@@ -23,11 +23,6 @@ Session(app)
 # ---------------- /Configuration ---------------
 
 
-
-app.lista_databases = []
-app.lista_auths_sap = []
-app.lista_projetos  = []
-app.lista_boto3     = []
 app.db              = eu.local_db()
 app.disk_io         = psutil.disk_io_counters()
 app.disk_io_now     = datetime.now()
@@ -119,15 +114,6 @@ def add_conf(tag, value, nosep=False):
     return ret.strip()
 
 
-def create_menu_add(local=[]):
-    ret =  '<div class="dropdown-content">'
-    for x in local:
-        ret += f'''<a href="#" onClick="jsComponentActionAdd(this, '{x}')">Add to {x}</a>'''
-    ret +=  '</div>'
-    return Markup(ret)
-
-
-
 def create_component(local, config, addin="", index=""):
     type = config[f'C{index}_TYPE']
    
@@ -149,6 +135,97 @@ def create_component(local, config, addin="", index=""):
 #######################################################################################
 #  rotinas gerais
 #######################################################################################
+
+
+
+def metricas_log(log_texto: str):
+    # --- Datas ---
+    padrao_data = re.compile(
+        r'^(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})',
+        re.MULTILINE
+    )
+    datas = padrao_data.findall(log_texto)
+
+    if len(datas) < 2:
+        tempo_decorrido = None
+        tempo_segundos = 0
+    else:
+        inicio = datetime.strptime(datas[0], "%d/%m/%Y %H:%M:%S")
+        fim    = datetime.strptime(datas[-1], "%d/%m/%Y %H:%M:%S")
+        tempo_decorrido = fim - inicio
+        tempo_segundos = tempo_decorrido.total_seconds()
+
+    # --- Últimos valores ---
+    ult_qtd_parc = {}
+    ult_fetchall = {}
+
+    encontrou_inst = False
+    ultimo_qtd_sem_inst = None
+    ultimo_fetch_sem_inst = None
+
+    # --- Processa linha a linha ---
+    for linha in log_texto.splitlines():
+        m_inst = re.search(r'INST=\[(\d+)/\d+\]', linha)
+
+        if m_inst:
+            encontrou_inst = True
+            inst = int(m_inst.group(1))
+        else:
+            inst = None
+
+        # qtd_parc
+        m_qtd = re.search(r'qtd_parc=([\d,]+)', linha)
+        if m_qtd:
+            valor = int(m_qtd.group(1).replace(',', ''))
+            if inst is not None:
+                ult_qtd_parc[inst] = valor
+            else:
+                ultimo_qtd_sem_inst = valor
+
+        # FetchALL
+        m_fetch = re.search(r'FetchALL=([\d,]+)', linha)
+        if m_fetch:
+            valor = int(m_fetch.group(1).replace(',', ''))
+            if inst is not None:
+                ult_fetchall[inst] = valor
+            else:
+                ultimo_fetch_sem_inst = valor
+
+    # --- Cálculo final ---
+    total_records = 0
+    qtd_text = "Total  :"
+
+    if encontrou_inst:
+        for inst in set(ult_qtd_parc) | set(ult_fetchall):
+            if inst in ult_fetchall:
+                total_records += ult_fetchall[inst]
+            else:
+                total_records += ult_qtd_parc.get(inst, 0)
+                qtd_text = "Partial:"
+    else:
+        if ultimo_fetch_sem_inst is not None:
+            total_records = ultimo_fetch_sem_inst
+            qtd_text = "Total  :"
+        elif ultimo_qtd_sem_inst is not None:
+            total_records = ultimo_qtd_sem_inst
+            qtd_text = "Partial:"
+        else:
+            total_records = 0
+            qtd_text = "Total  :"
+
+    # --- QtdFiles ---
+    qtd_files = len(re.findall(r'Generated File:', log_texto))
+
+    # --- Throughput ---
+    if tempo_segundos > 0:
+        rec_por_seg = int(total_records / tempo_segundos)
+    else:
+        rec_por_seg = 0
+
+    return f"Time: {tempo_decorrido} ".ljust(20) + f"{qtd_text} {total_records:,} ".ljust(25) + f"Speed: {rec_por_seg}/seg ".ljust(20) + f"Files Count: {qtd_files}"
+
+
+
 
 def job_info_memory():
     mem   = psutil.virtual_memory()
@@ -329,12 +406,26 @@ def job_info_logger_batch_id():
                         job_val  = log_data.get(job_name)
                         log_data[job_name] = ("" if job_val == None else job_val ) + job_line
 
+        xx_id = 0
         for x in log_data:
-            ret = ret + f"<hr><a href=/designer?job_name={x} target=__blank>{x}</a><hr>" + log_data[x]
+            xx_id += 1
+            icone = "▶️"
+
+            log_txt     = log_data[x]
+            log_metrica = metricas_log(log_txt)
+            
+            if "STATUS:OK" in log_txt:
+                icone = "🟢" 
+
+            if "STATUS:ERRO" in log_txt:
+                icone = "🔴" 
+            ret_header = f"""{icone} <a href=/designer?job_name={x} target=__blank>[edit]</a> - <a onclick=js_log_in_row('{xx_id}') style='cursor:pointer'>{x.ljust(50)}</a> {log_metrica} <hr>"""
+            ret_data   = f"<div id=id_log_{ xx_id } style='display:none'>{ log_txt }<hr></div>"
+            ret   = ret + ret_header + ret_data
     else:
         ret = "Logfile not found!"
         
-    return { "message": ret }
+    return { "message": "<table class=table_detail>" + ret + "</table>" }
 
 
 def job_info_logger_big():
@@ -419,6 +510,18 @@ def test_connection():
     except Exception as e:
         return {"message": f"Error connecting to {db_name}: {str(e)}"}
     
+def job_info_init_values():
+    sql                 = db_sql("job_combobox")
+    l_cbo_databases     = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'DATABASES'  )).data]   )
+    l_cbo_auths_sap     = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.SAP'  )).data]   )
+    l_cbo_projetos      = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'FOLDER_ROOT')).data]   )
+    l_cbo_boto3         = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.S3'   )).data]   )
+
+    return {"cbo_databases" : l_cbo_databases,
+            "cbo_auths_sap" : l_cbo_auths_sap,
+            "cbo_projetos"  : l_cbo_projetos,
+            "cbo_boto3"     : l_cbo_boto3    }
+    
 #######################################################################################
 #  
 #######################################################################################
@@ -429,6 +532,9 @@ def test_connection():
 def info():
     name = request.form.get("name")
 
+    if name == "init_values":
+        return job_info_init_values()
+    
     if name == "check_abort":
         return job_info_check_abort()
     
@@ -630,10 +736,10 @@ def job_load():
         ## ----- jobs data -------------------
         ## ----------------------------------------------------------------------
 
-        ret['JOB'] = { "origem"    : origem,
-                       "transform" : transform,
-                       "destino"   : destino,
-                       "dataset"   : dataset }
+        ret['JOB'] = { "origem"        : origem,
+                       "transform"     : transform,
+                       "destino"       : destino,
+                       "dataset"       : dataset }
     return ret
 
 
@@ -641,7 +747,7 @@ def job_load():
 
 
 #######################################################################################
-# login / loggout
+# pages
 #######################################################################################
 
 @app.route("/error")
@@ -669,15 +775,9 @@ def logout():
     return redirect("/")
 
 
-#######################################################################################
-#  open pages /  globals  designer
-#######################################################################################
-
 @app.route("/logger", methods=["GET", "POST"])
 def job_logger():
-    jn = "-" if request.args.get("job_name") == None else request.args.get("job_name")
-    id = request.args.get("batch_id")
-    return render_template( 'job_logger.html',batch_id = id, job_name = jn )
+    return render_template( 'job_logger.html' )
 
 @app.route("/sequences")
 def job_sequences():
@@ -699,35 +799,14 @@ def job_globals():
 def job_designer():
     if not session.get("status_login"):
         return redirect("/login")
-    
-    job_name = request.args.get("job_name")    
-
-    return render_template('job_designer.html', 
-                           job_name          = job_name,
-                           menu1             = create_menu_add(['origin','target']),
-                           menu2             = create_menu_add(['origin']),
-                           menu3             = create_menu_add(['transf']),
-                           menu4             = create_menu_add(['target', 'dataset']),
-                           CBO_DATABASES     = ",".join(app.lista_databases),
-                           CBO_AUTHS_SAP     = ",".join(app.lista_auths_sap),
-                           CBO_PROJETOS      = ",".join(app.lista_projetos),
-                           CBO_BOTO3         = ",".join(app.lista_boto3)    )
+    return render_template('job_designer.html')
 
 
 
 @app.route("/")
 def index():
-    eu.load_globals() 
-
     if not session.get("status_login"):
         return redirect("/login")
-        
-    sql                 = db_sql("job_combobox")
-    app.lista_databases = [x[0] for x in db_execute(sql.replace("<1>", 'DATABASES'  )).data]
-    app.lista_auths_sap = [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.SAP'  )).data]
-    app.lista_projetos  = [x[0] for x in db_execute(sql.replace("<1>", 'FOLDER_ROOT')).data]
-    app.lista_boto3     = [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.S3'   )).data]
-
     return render_template('index.html', login=session["status_login"])
 
 

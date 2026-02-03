@@ -19,7 +19,6 @@
 				alert( a.message );
 				ttr = Array.from(id_table_proc.querySelectorAll('a')).filter( eel => eel.innerText.trim() === ("" + x) ) [0];
 				ttr.parentNode.parentNode.remove();
-				//window.location.reload();
 			}, null);
 
 		}
@@ -48,10 +47,10 @@
 						}
 
 						row.cells[2].innerHTML = '<a href=/logger?batch_id=' + row.cells[2].innerHTML + ' target=LOGG>' + row.cells[2].innerHTML + '</a>';
-						if (row.cells[0].innerHTML == "F") row.cells[0].innerHTML = "🟢";
-						if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = "🟥";
-						if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = "🔷";
-						if (row.cells[0].innerHTML == "K") row.cells[0].innerHTML = "❌";
+						if (row.cells[0].innerHTML == "F") row.cells[0].innerHTML = ICO_OK;
+						if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = ICO_ERROR;
+						if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = ICO_RUNNING;
+						if (row.cells[0].innerHTML == "K") row.cells[0].innerHTML = ICO_WARNING;
 
 					}
 				});				
@@ -121,7 +120,6 @@
 		<button onclick="window.open('/designer?job_name=newjob')">Create new Job</button> &nbsp;
 		<button onclick="window.open('/globals')">Parameters Globals</button> &nbsp;
 		<button onclick="window.open('/sequences')">Sequences</button> &nbsp;
-		<button onclick="window.open('/monitor')">Dashboard Process</button> &nbsp;
 
 		<div id="id_title_page" class="titles_toolbar" style="cursor: pointer" onclick="window.open('/logout')">Logout:
 			{{ login }}</div>
@@ -144,7 +142,7 @@
 				<div class="div_pre" id="id_process_running"></div>
 				<br>
 
-				<span class="titulo">Monitor Process (Timeled) </span> <!-- 🟢 - OK | 🟥 - ABORTED | 🔷 - IN EXECUTION | ❌ - FINISHED WITH WARNINGS -->
+				<span class="titulo">Monitor Process (Timeled) </span>
 				<div class="div_pre" id="id_process_aborted"></div>
 			</div>
 

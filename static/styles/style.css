@@ -22,6 +22,18 @@ body {
 
 }
 
+
+.blink {
+  animation: piscar 2s infinite;
+}
+
+@keyframes piscar {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+
 .container {
   flex: 1;
   display: flex;
@@ -233,14 +245,14 @@ a:hover {
 
 
 .dropbtn {
-  padding: 16px;
+  padding: 4px;
   border: none;
   height: 25px;
 }
 
 .dropdown {
-  /*position: relative;*/
-  display: inline-block;
+  width: 100px;
+  display: table-cell;
 }
 
 .dropdown-content {

@@ -1,18 +1,39 @@
 <html>
 
 <head>
-	<title>Algar ETL - {{job_name}}</title>
+	<title>Algar ETL</title>
     <script type="text/javascript" src="/static/js/functions.js"></script>
 	<link rel="StyleSheet" href="/static/styles/style.css" type="text/css">
 
     <script>
         var g_objeto;
 
+
+        function js_job_init() {
+            var v_parameters        = Object.fromEntries(new URLSearchParams(window.location.search));
+            P_NEWJOB_NAME.value     = v_parameters.job_name;
+            document.title          = 'Algar ETL - ' + P_NEWJOB_NAME.value;
+            id_title_page.innerHTML = P_NEWJOB_NAME.value;
+
+            var menu1               = js_create_menu_add(['origin','target']);
+            var menu2               = js_create_menu_add(['origin']);
+            var menu3               = js_create_menu_add(['transf']);
+            var menu4               = js_create_menu_add(['target', 'dataset']);
+
+            ajax("/info", { "name":"init_values" }, function(forms) {
+                fill_combo(C_SQL_DB         , forms.cbo_databases);
+                fill_combo(C_BOTO3_BUCKET   , forms.cbo_boto3);
+                fill_combo(P_NEWJOB_PROJECT , forms.cbo_projetos);
+                fill_combo(C_ODATA_AUTH     , forms.cbo_auths_sap);
+            }, null);
+        }
+
+
         //#####################################################################################################
         //
         //#####################################################################################################
 
-        function jsTestConnection() {
+        function js_test_connection() {
             if ( C_SQL_DB.value == "" ) {
                 alert("Select Database first.");
                 return;
@@ -79,17 +100,27 @@
         function js_job_save(isNew = false) {
             var attrs_transf = {};
 
-            if ( P_NEWJOB_NAME.value == 'newjob' || isNew ) {
-                 id_save_job_parameters.style.display = 'block';
+            if ( isNew ) {
+                id_save_job_parameters.style.display = 'block';
                 return;
             }
 
-            if ( P_NEWJOB_PROJECT.value.length < 3 ||
-                 P_NEWJOB_NAME.value.length < 5    ||
-                 P_NEWJOB_FOLDER.value.length < 3  || 
-                 P_NEWJOB_NAME.value == 'newjob' ) 
+            if ( P_NEWJOB_NAME.value == 'newjob'  ) {
+                alert('Enter a valid job name.');
+                id_save_job_parameters.style.display = 'block';
+                return;
+            }
+
+            if ( P_NEWJOB_PROJECT.value.length < 3 )
             {
-                alert(" Job Name/Folder/Project Can't Empty or 'newjob'! ");
+                alert("The projectName must be >= 3 characters.");
+                return;
+            }                
+            
+
+            if ( P_NEWJOB_NAME.value.length < 3 || P_NEWJOB_FOLDER.value.length < 3 )
+            {
+                alert("The jobName/folderName must be >= 3 characters.");
                 return;
             }
 
@@ -141,6 +172,8 @@
                 id_transf.innerHTML        = forms.JOB['transform'];
                 id_target.innerHTML        = forms.JOB['destino'];
                 id_dataset.innerHTML       = forms.JOB['dataset'];
+
+
                 TRANSFORM_DATA.value       = forms.TRANSFORM_DATA;
                 TRANSFORM_FILTER.value     = forms.TRANSFORM_FILTER;
                 TRANSFORM_LOOKUPS.value    = forms.TRANSFORM_LOOKUPS;
@@ -251,14 +284,14 @@
     <div class="div-esquerda">
 				<div class="area">
 <center>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_sql.png       type_obj="sql">     <br>Database {{menu1}}    </div><br>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_filename.png  type_obj="filename"><br>CSV {{menu1}}         </div><br>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_odata.png     type_obj="odata">   <br>ODATA/SAP {{menu2}}   </div><br>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_dataset.png   type_obj="dataset"> <br>Dataset {{menu4}}     </div><br>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer {{menu3}} </div><br>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) {{menu1}}     </div><br>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML {{menu1}}         </div><br>
-            <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_py.png    type_obj="py">      <br>PythonCode {{menu2}}  </div><br>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_sql.png       type_obj="sql">     <br>Database {{menu1}}    </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) {{menu1}}     </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_py.png        type_obj="py">      <br>PythonCode {{menu2}}  </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_filename.png  type_obj="filename"><br>CSV {{menu1}}         </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML {{menu1}}         </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_odata.png     type_obj="odata">   <br>ODATA/SAP {{menu2}}   </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_dataset.png   type_obj="dataset"> <br>Dataset {{menu4}}     </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer {{menu3}} </div>
 </center>
 				</div>
     </div>
@@ -328,8 +361,8 @@
                 <tr><td>File Required</td>
                     <td>
                         <select id="C_FILENAME_FILE_REQUIRED">
-                            <option value="1">Sim</option>
-                            <option value="0">Nao</option>
+                            <option value="1">Yes</option>
+                            <option value="0">No</option>
                         </select>
                     </td> 
                 </tr>
@@ -416,8 +449,8 @@
                 <tr><td>FileName</td><td><input type=text id="C_XML_FILENAME"></td> </tr>
                 <tr><td>File Required</td><td>
                         <select id="C_XML_FILE_REQUIRED">
-                            <option value="1">Sim</option>
-                            <option value="0">Nao</option>
+                            <option value="1">Yes</option>
+                            <option value="0">No</option>
                         </select>
                 </td> </tr>
                 <tr><td>Fields </td><td> <textarea id="C_XML_FIELDS" rows="10"></textarea></td> </tr>
@@ -435,7 +468,7 @@
         <h2>Database Editor</h2>
             <table >
                 <tr><td>Name</td><td> <input type="text" id="C_SQL_NAME"></td> </tr>
-                <tr><td>Database <a href=# onclick="jsTestConnection()">(test)</a></td><td> <select id="C_SQL_DB"></select></td> </tr>
+                <tr><td>Database <a href=# onclick="js_test_connection()">(test)</a></td><td> <select id="C_SQL_DB"></select></td> </tr>
 
                 <tr><td>SQL Type </td><td><select id="C_SQL_TYPE">
                     <option value="Insert">Insert</option>
@@ -490,7 +523,7 @@
             <table >
                 <tr><td>Project</td><td><select id="P_NEWJOB_PROJECT"></select></td> </tr>
                 <tr><td>Folder</td><td><input type="text" id="P_NEWJOB_FOLDER"  oninput="this.value = this.value.toUpperCase();"></td> </tr>
-                <tr><td>Job Name</td><td><input type="text" id="P_NEWJOB_NAME"  oninput="this.value = this.value.toUpperCase();" value="{{job_name}}"></td></tr>
+                <tr><td>Job Name</td><td><input type="text" id="P_NEWJOB_NAME"  oninput="this.value = this.value.toUpperCase();"></td></tr>
                 <tr><td colspan="2"><button onclick="js_job_save_new()">Save</button></td> </tr>
             </table>
         </div>  
@@ -539,13 +572,8 @@
 
 
     <script> 
-        fill_combo(C_BOTO3_BUCKET   , '{{CBO_BOTO3}}'    )
-        fill_combo(P_NEWJOB_PROJECT , '{{CBO_PROJETOS}}' )
-        fill_combo(C_SQL_DB         , '{{CBO_DATABASES}}')
-        fill_combo(C_ODATA_AUTH     , '{{CBO_AUTHS_SAP}}')        
-
+        js_job_init();
         js_job_load(); 
-        setTitles();
 
         document.querySelectorAll('input, textarea, [contenteditable]').forEach(el => {
             el.setAttribute('spellcheck', 'false');

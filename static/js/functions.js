@@ -9,6 +9,14 @@ g_components = [
     'C_PY_NAME', 'C_PY_CODE'
 ];
 
+
+const ICO_OK      = "🟢";
+const ICO_ERROR   = "🔴";
+const ICO_RUNNING = "▶️"
+const ICO_WARNING = "❌";
+
+
+
 function ajax(url, dataBody, jsAction, jsError) {
     fetch(url, {
         method: "POST",
@@ -44,13 +52,6 @@ function fill_combo(cbo, data_cbo) {
         option.value = option.text = dbs[i];
         cbo.add(option);
     }            
-}
-
-
-
-function setTitles() {
-    document.title  = 'Algar ETL - ' + document.all.P_NEWJOB_NAME.value;
-    document.all.id_title_page.innerHTML = document.all.P_NEWJOB_NAME.value;
 }
 
 
@@ -122,4 +123,16 @@ function jsNoSpeel() {
             el.setAttribute('spellcheck', 'false');
             el.classList.add('no-spellcheck');
         });
+}
+
+
+function js_create_menu_add(local = []) {
+    let ret = '<div class="dropdown-content">';
+
+    for (const x of local) {
+        ret += `<a href="#" onClick="jsComponentActionAdd(this, '${x}')">Add to ${x}</a>`;
+    }
+
+    ret += '</div>';
+    return ret;
 }

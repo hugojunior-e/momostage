@@ -7,6 +7,10 @@ import json
 import boto3
 import sys
 
+import snowflake.connector
+import pandas as pd
+from snowflake.connector.pandas_tools import write_pandas
+
 class ETL_OUT:
   def __init__(self, idx, config, inst_mod=0,logger_id=0):
     self.config              = config
@@ -21,10 +25,12 @@ class ETL_OUT:
 
     #-----------
     if self.value('C_TYPE') == 'sql':
-      self.sql_db     = self.value('C_SQL_DB')
-      self.sql        = self.value('C_SQL')
-      self.sql_after  = self.value('C_SQL_AFTER')
-      self.sql_before = self.value('C_SQL_BEFORE')
+      self.sql_sf_cfgs   = False
+      self.sql_db        = self.value('C_SQL_DB')
+      self.sql           = self.value('C_SQL')
+      self.sql_after     = self.value('C_SQL_AFTER')
+      self.sql_before    = self.value('C_SQL_BEFORE')
+
 
     #-----------
 
@@ -32,6 +38,10 @@ class ETL_OUT:
       self.filename        = self.value("C_FILENAME")      
       self.filename_fd     = self.value('C_FILENAME_FD')
       self.filename_fields = self.value("C_FILENAME_FIELDS").split("\n")
+      snowconf = self.sql.split(".")
+
+      etl_utils.log(self.logger_id, f"snowconf = {snowconf}")
+
 
     #-----------
 
@@ -72,12 +82,17 @@ class ETL_OUT:
 
 
   def boto3NewFileName(self):
-    last_name  = self.boto3_filename.split("/")[-1]
-    gen_hash   = "gzip" in self.boto3_format
-    name       = etl_utils.generate_hash( prefix=last_name , with_hash=gen_hash)
-    self.boto3_file_list.append( name )
-    etl_utils.log(self.logger_id, "Generated File: " + name)
-    return name
+    last_name          = self.boto3_filename.split("/")[-1]
+    new_filename_model = f"{ etl_utils.generate_hash_filename() }_S3_{ self.logger_id['batch_id'] }_{ last_name }"
+    
+    if "gzip" not in self.boto3_format:
+      new_filename_model = f"{ etl_utils.get_tmp_dir() }/{ last_name }"
+
+    self.boto3_file_list.append( new_filename_model )
+    etl_utils.log(self.logger_id, "Generated File: " + new_filename_model)
+    return new_filename_model
+  
+
   
   def boto3CheckFileSize(self):
     tamanho = os.path.getsize( self.boto3_file_local ) / 1024 / 1024
@@ -129,8 +144,37 @@ class ETL_OUT:
       if self.db == None:
         self.db = etl_utils.connect_db( self.sql_db )
         self.cur = self.db.cursor()
-      self.cur.executemany( self.sql , data)
-      self.db.commit()
+        
+      if self.sql_db == "SNOWFLAKE":
+        if self.sql_sf_cfgs == False:
+          self._db_colunas  = self.value('C_SQL_FIELDS').split("\n")
+          self._db_snowconf = self.value('C_SQL_ORIG').split(".")
+          self.sql_sf_cfgs  = True
+
+        df = pd.DataFrame(data, columns=self._db_colunas)
+        date_cols = [
+            "TRANS_DATE",
+            "TRANSACTION_DATE",
+            "F_TIMESTAMP"
+        ]
+
+        for col in date_cols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+
+
+        success, nchunks, nrows, _ = write_pandas(
+            self.db,
+            df,
+            table_name=self._db_snowconf[2],
+            schema=self._db_snowconf[1],
+            database=self._db_snowconf[0],
+            chunk_size=50000,
+            parallel=8
+        )
+      else:
+        self.cur.executemany( self.sql , data)
+        self.db.commit()
 
 
     # ----------------------------------------
@@ -153,9 +197,6 @@ class ETL_OUT:
       if "gzip" in self.boto3_format:
         self.boto3CheckFileSize()
 
-
-      
-        
 
     # ----------------------------------------
     # executa saidas arquivos de hasheds """
@@ -215,6 +256,14 @@ class ETL_OUT:
       dbt   = etl_utils.connect_db( self.sql_db )
       dbt_c = dbt.cursor()
       dbt_c.execute(  self.sql_after   )     
+
+    if self.value('C_TYPE') == 'boto3':
+      l_arqs_s3 = [
+        f
+        for f in os.listdir( etl_utils.get_tmp_dir() )
+        if f"_S3_{ self.logger_id['batch_id'] }_" in f
+      ]
+      #etl_utils.log(self.logger_id, f"Files To Send: {l_arqs_s3}")
 
 
   #=======================================================================================================

@@ -30,9 +30,10 @@ class ETL:
   def transform(self, dados, lookups):
     if len(self.transformations) == 0:
       return dados
-
+    x = dados
     for r in self.transformations:
-      return r['C_TRANS'](dados, lookups)
+      x = r['C_TRANS'](x, lookups)
+    return x
 
 
   #=======================================================================================================
@@ -326,13 +327,20 @@ class ETL:
           campos_cur = [ f":{ xx + 1 } as {fn}" for xx,fn in enumerate(campos)  ]
           campos_key = ""
 
+          if self.config_target['C1_SQL_DB'] == "SNOWFLAKE":
+            binds      = [ "%s" for xx in range(len(campos))]
+
           for ff in l_fields:
             if "*" in ff:
               campos_key = campos_key + " AND " + ff.replace("*", "") + " = cx." + ff.replace("*", "")
 
-         
+          self.config_target[ f'C{idx+1}_SQL_ORIG'] = self.config_target[ f'C{idx+1}_SQL']
+          
+
           if self.config_target[ f'C{idx+1}_SQL_TYPE'] == "Insert":
             self.config_target[ f'C{idx+1}_SQL'] = f"""INSERT INTO {tabela}({ ",".join(campos) }) values ({ ",".join(binds) })"""
+
+          etl_utils.log(self.logger_id, self.config_target[ f'C{idx+1}_SQL'] )
 
           if self.config_target[ f'C{idx+1}_SQL_TYPE'] == "Update Then Insert":
             self.config_target[ f'C{idx+1}_SQL'] = f"""

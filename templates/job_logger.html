@@ -6,28 +6,37 @@
 	<script type="text/javascript" src="/static/js/functions.js"></script>
 
 	<style>
-body {
-  margin: 10px;
-}
+		body {
+			margin: 10px;
+		}
 
-vv {
-	display: none;
-  }
-</style>
+		vv {
+			display: none;
+		}
+	</style>
 
 	<script>
-        function js_bigdata(id) {
-			const x    = document.getElementById("big_" + id).innerHTML;
-			const obj  = JSON.parse(x);
+		var v_parameters = Object.fromEntries(new URLSearchParams(window.location.search));
+		var v_job_name   = v_parameters.job_name  || '-';
+		var v_batch_id   = v_parameters.batch_id;
+
+		function js_bigdata(id) {
+			const x = document.getElementById("big_" + id).innerHTML;
+			const obj = JSON.parse(x);
 			const keys = Object.keys(obj);
-			a          = window.open('');
-			a.document.body.innerHTML = "<pre>" + obj[ keys[0] ] + "</pre>";
-        }
+			a = window.open('');
+			a.document.body.innerHTML = "<pre>" + obj[keys[0]] + "</pre>";
+		}
+
+		function js_log_in_row(iid) {
+			el = document.getElementById("id_log_" + iid);
+			el.style.display = el.style.display == 'none' ? 'block' : 'none';
+		}
 
 		function jsLogByBatchId() {
-			data = { "name":"log_batch_id","batch_id":"{{batch_id}}", "job_name":"{{job_name}}" };
-			if ( '{{job_name}}' == '-' ) {
-				data = { "name":"log_batch_id","batch_id":"{{batch_id}}" };
+			data = { "name": "log_batch_id", "batch_id": v_batch_id, "job_name": v_job_name };
+			if (v_job_name == '-') {
+				data = { "name": "log_batch_id", "batch_id": v_batch_id };
 			}
 
 			ajax("/info", data, function (ret) {
@@ -38,11 +47,14 @@ vv {
 </head>
 
 <body>
-    <pre id="id_log"></pre>
+	<span id="id_legenda"></span>
+	<hr>
 
+	<pre id="id_log"></pre>
 	<script>
-	  jsLogByBatchId()
-    </script>
+		id_legenda.innerHTML = `<center> ${ICO_OK} STATUS:OK  |  ${ICO_ERROR} STATUS:ERRO  |  ${ICO_RUNNING} RUNNING </center>`;
+		jsLogByBatchId();
+	</script>
 </body>
 
 </html>
