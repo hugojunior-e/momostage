@@ -255,6 +255,15 @@ class ETL:
             r         = etl_utils.execute_wait(command=cmd, database=dat, timesleep=seg)
             etl_utils.log(self.logger_id, f"Executing #WAIT: {r}" )
 
+          if comando[0] == "#EXECUTION_APPROVAL":
+            line_cmd  = x.strip().split(" ")  
+            dat       = line_cmd[1]
+            cmd       = " ".join( line_cmd[2:] )
+            r         = etl_utils.execute_on_db(command=cmd, database=dat, is_sql=True)
+            etl_utils.log(self.logger_id, f"Executing EXECUTION_APPROVAL: {r}" )
+            if 'declined' in str(r) :
+              raise Exception( f"Execution Not Approved..." )     
+
           if comando[0] == "#DB_EXECUTE_VARS":
             line_cmd  = x.strip().split(" ")
             dat       = line_cmd[1]
@@ -262,6 +271,7 @@ class ETL:
             r         = etl_utils.execute_on_db(command=cmd, database=dat, is_sql=True)
             etl_utils.log(self.logger_id, f"Executing DB_EXECUTE_VARS: {r}" )
             self.global_vars.append(r)
+                
 
           if comando[0] == "#SMS":
             cmd   = x.strip().split(" ")

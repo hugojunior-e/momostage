@@ -20,6 +20,14 @@
             var menu3               = js_create_menu_add(['transf']);
             var menu4               = js_create_menu_add(['target', 'dataset']);
 
+
+            document.querySelectorAll("menu1").forEach(menu => {  menu.innerHTML = menu1;    });
+            document.querySelectorAll("menu2").forEach(menu => {  menu.innerHTML = menu2;    });
+            document.querySelectorAll("menu3").forEach(menu => {  menu.innerHTML = menu3;    });
+            document.querySelectorAll("menu4").forEach(menu => {  menu.innerHTML = menu4;    });
+
+            
+
             ajax("/info", { "name":"init_values" }, function(forms) {
                 fill_combo(C_SQL_DB         , forms.cbo_databases);
                 fill_combo(C_BOTO3_BUCKET   , forms.cbo_boto3);
@@ -41,6 +49,19 @@
 
             ajax("/info", { "name":"test_connection", "db_name": C_SQL_DB.value }, function(a) {
                 alert(a.message);
+            }, null);
+        }
+
+
+        function js_get_fields() {
+            if ( C_SQL_DB.value == "" ) {
+                alert("Select Database first.");
+                return;
+            }
+
+            ajax("/info", { "name":"detect_fields", "db_name": C_SQL_DB.value, "db_sql": C_SQL.value }, function(a) {
+                x = window.open("", "detect_fields", "width=800,height=400,scrollbars=yes,resizable=yes");
+                x.document.body.innerHTML = "<pre>" + a.message + "</pre>";
             }, null);
         }
 
@@ -91,7 +112,8 @@
 
         function js_job_save_new() {
             id_save_job_parameters.style.display = '';
-            setTitles();
+            document.title          = 'Algar ETL - ' + P_NEWJOB_NAME.value;
+            id_title_page.innerHTML = P_NEWJOB_NAME.value;
         }
         
         
@@ -153,6 +175,7 @@
 
             ajax("/job_save", data, function(a) {
                     alert(a.message);
+                    history.pushState(null, '', '?job_name=' + P_NEWJOB_NAME.value);
             }, null);
         }
 
@@ -215,6 +238,8 @@
             g_objeto  = obj.parentElement.parentElement.getElementsByTagName('input')[0]
             local     = g_objeto.attributes['local'].value;
             type      = g_objeto.attributes['type_obj'].value;
+
+            id_detect_fields.style.display = (local == "target") ? 'none' : 'block';
             
             if (act == 1) {
                 if (local == "dataset") {
@@ -254,7 +279,7 @@
             }            
 
             menu           = '<div class="dropdown-content"><a href="#" onClick="jsComponentAction(this, 1)">Edit</a><a href="#" onClick="jsComponentAction(this, 2)">Remove</a></div>';
-            ooo            = obj.parentElement.parentElement.getElementsByTagName('input')[0];
+            ooo            = obj.parentElement.parentElement.parentElement.getElementsByTagName('input')[0];
             txt            = '<input local="' + local + '" class=dropbtn type=image type_obj="' + ooo.attributes['type_obj'].value + '" src="' + ooo.src + '">';
             node           = document.createElement("div");
             node.className = "dropdown";
@@ -284,14 +309,14 @@
     <div class="div-esquerda">
 				<div class="area">
 <center>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_sql.png       type_obj="sql">     <br>Database {{menu1}}    </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) {{menu1}}     </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_py.png        type_obj="py">      <br>PythonCode {{menu2}}  </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_filename.png  type_obj="filename"><br>CSV {{menu1}}         </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML {{menu1}}         </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_odata.png     type_obj="odata">   <br>ODATA/SAP {{menu2}}   </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_dataset.png   type_obj="dataset"> <br>Dataset {{menu4}}     </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer {{menu3}} </div>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_sql.png       type_obj="sql">     <br>Database <menu1></menu1>    </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) <menu1></menu1>      </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_py.png        type_obj="py">      <br>PythonCode <menu2></menu2>   </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_filename.png  type_obj="filename"><br>CSV <menu1></menu1>          </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML <menu1></menu1>          </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_odata.png     type_obj="odata">   <br>ODATA/SAP <menu2></menu2>   </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_dataset.png   type_obj="dataset"> <br>Dataset <menu4></menu4>     </div><hr>
+    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer <menu3></menu3> </div>
 </center>
 				</div>
     </div>
@@ -464,54 +489,78 @@
 
     <div id="id_sql_edit" class="itools_modal">
         <div class="itools_modal_content">
-        <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
-        <h2>Database Editor</h2>
-            <table >
-                <tr><td>Name</td><td> <input type="text" id="C_SQL_NAME"></td> </tr>
-                <tr><td>Database <a href=# onclick="js_test_connection()">(test)</a></td><td> <select id="C_SQL_DB"></select></td> </tr>
-
-                <tr><td>SQL Type </td><td><select id="C_SQL_TYPE">
-                    <option value="Insert">Insert</option>
-                    <option value="Update Then Insert">Update Then Insert</option>
-                </select>   </td> </tr>
+            <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
+            <h2>Database Editor</h2>
+            <table>
                 <tr>
-                      <td>SQL Format</td>
-                      <td> 
+                    <td>Name</td>
+                    <td> <input type="text" id="C_SQL_NAME"></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>Database</td>
+                    <td> <select id="C_SQL_DB"></select></td>
+                    <td><a href=# onclick="js_test_connection()">(test)</a></td>
+                </tr>
+    
+                <tr>
+                    <td>SQL Type </td>
+                    <td><select id="C_SQL_TYPE">
+                            <option value="Insert">Insert</option>
+                            <option value="Update Then Insert">Update Then Insert</option>
+                        </select> </td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>SQL Format</td>
+                    <td>
                         <select id="C_SQL_AUTO">
                             <option value="1">Auto</option>
                             <option value="0">Manual</option>
-                        </select>                        
-                      </td> 
+                        </select>
+                    </td>
+                    <td></td>
                 </tr>
                 <tr>
-                      <td>ArraySize</td>
-                      <td> 
+                    <td>ArraySize</td>
+                    <td>
                         <select id="C_SQL_ARRAYSIZE">
                             <option value="5000">Default(5000)</option>
                             <option value="20000">20000</option>
                             <option value="50000">50000</option>
                             <option value="100000">100000</option>
-                        </select>                        
-                      </td> 
-                </tr>                
-
+                        </select>
+                    </td>
+                    <td></td>
+                </tr>
+    
                 <tr valign="top">
-                    <td >SQL</td><td><textarea id="C_SQL" rows="5" cols="80"></textarea></td>
+                    <td>SQL</td>
+                    <td><textarea id="C_SQL" rows="5" cols="80"></textarea></td>
+                    <td><a href="#" onclick="js_get_fields()" id="id_detect_fields"> detect fields </a></td>
                 </tr>
                 <tr valign="top">
-                    <td >SQL Before</td><td><textarea id="C_SQL_BEFORE" rows="5" cols="80"></textarea></td>
+                    <td>SQL Before</td>
+                    <td><textarea id="C_SQL_BEFORE" rows="5" cols="80"></textarea></td>
+                    <td></td>
                 </tr>
                 <tr valign="top">
-                    <td >SQL After</td><td><textarea id="C_SQL_AFTER" rows="5" cols="80"></textarea></td>
+                    <td>SQL After</td>
+                    <td><textarea id="C_SQL_AFTER" rows="5" cols="80"></textarea></td>
+                    <td></td>
                 </tr>
                 <tr valign="top">
-                    <td >SQL Fields</td><td><textarea id="C_SQL_FIELDS" rows="5" cols="80"></textarea></td>
-                </tr>                                                        
-
-                <tr><td colspan="2"><button onclick="jsComponentSave()">Save</button></td> </tr>
+                    <td>SQL Fields</td>
+                    <td><textarea id="C_SQL_FIELDS" rows="5" cols="80"></textarea></td>
+                    <td></td>
+                </tr>
+    
+                <tr>
+                    <td colspan="3"><button onclick="jsComponentSave()">Save</button></td>
+                </tr>
             </table>
-        </div>  
-    </div>   
+        </div>
+    </div>
     
 
     <div id="id_save_job_parameters" class="itools_modal">

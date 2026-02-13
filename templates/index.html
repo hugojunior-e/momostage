@@ -46,7 +46,7 @@
 							row.cells[6].innerHTML = '<a href=# onclick=jsCheckAbort(' + row.cells[2].innerHTML + ')>check</a>';
 						}
 
-						row.cells[2].innerHTML = '<a href=/logger?batch_id=' + row.cells[2].innerHTML + ' target=LOGG>' + row.cells[2].innerHTML + '</a>';
+						row.cells[2].innerHTML = '<a href=/logger?batch_id=' + row.cells[2].innerHTML + ' target=logger_' +  row.cells[2].innerHTML + '>' + row.cells[2].innerHTML + '</a>';
 						if (row.cells[0].innerHTML == "F") row.cells[0].innerHTML = ICO_OK;
 						if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = ICO_ERROR;
 						if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = ICO_RUNNING;

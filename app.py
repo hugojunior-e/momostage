@@ -439,7 +439,7 @@ def job_info_logger_lotes():
     sql      = db_sql("job_logger_lotes", [job_name])
     ret      = ""
     for x in db_execute(sql).data:
-        ret = ret + f'<li> <a href=/logger?batch_id={x[0]}&job_name={job_name} target=LLOG> {x[0]}  </a> - {x[1]}'
+        ret = ret + f'<li> <a href=/logger?batch_id={x[0]}&job_name={job_name} target=logger_{x[0]}> {x[0]}  </a> - {x[1]}'
     return { "message": ret }
 
 
@@ -497,8 +497,27 @@ def job_list_treeview():
     return { "message": x.strip() }
 
 
+def job_info_detect_fields():
+    eu.load_globals()
+    db_name = request.form.get("db_name")
+    db_sql  = request.form.get("db_sql")
+    ret     = ""
+    if db_name == None or db_name == "":
+        return {"message": "No database selected."}
+    try:
+        tt   = eu.connect_db(db_name)
+        cc   = tt.cursor()
+        cc.execute("SELECT * FROM (\n" + db_sql.replace("#MOD#","0").replace("#RESTO#","0") + "\n) where 1=2")
+        #ret = "\n".join( [ (desc[0].ljust(50) + str(desc[1])) for desc in cc.description] )
+        ret = "\n".join( [ desc[0] for desc in cc.description] )
+    except Exception as e:
+        ret = str(e)
+
+    return { "message": ret }
+
 
 def test_connection():
+    eu.load_globals()
     db_name = request.form.get("db_name")
     if db_name == None or db_name == "":
         return {"message": "No database selected."}
@@ -582,6 +601,9 @@ def info():
     
     if name == "job_sequence_start":
         return job_sequence_start()
+    
+    if name == "detect_fields":
+        return job_info_detect_fields()
 
     if name == "dashboard_index":
         return {"memory": job_info_memory(), "process_aborted": job_info_last_abort(), "process_running": job_info_process_running() }
