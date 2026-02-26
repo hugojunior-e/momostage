@@ -3,6 +3,7 @@ import etl_hash
 import etl_in
 import etl_out
 import multiprocessing
+import threading
 import os
 import json
 import sys
@@ -11,14 +12,23 @@ import time
 from datetime import datetime
 
 class ETL:
-  def __init__(self, job_name, batch_id):
-    self.job_name        = job_name
-    self.global_vars     = []
-    self.batch_id        = batch_id
-    self.logger_id       = { "job_name":job_name, "batch_id":batch_id  }
-    self.transformations = []
-    self.config_orig     = {}
-    self.config_target   = {}
+  def __init__(self, job_name, batch_id, loop_value=None):
+    self.job_name               = job_name
+    self.global_vars            = []
+    self.batch_id               = batch_id
+    self.logger_id              = { "job_name":job_name, "batch_id":batch_id  }
+    self.transformations        = []
+    self.config_orig            = {}
+    self.config_target          = {}
+    self.loop_value             = loop_value
+    self.transfer_data_parallel = False
+
+    if loop_value != None:
+      etl_utils.log(self.logger_id,  f"######################################################################################################" )
+      etl_utils.log(self.logger_id,  f"########## [{ os.environ.get('LOOP_VALUES') }]" )
+      etl_utils.log(self.logger_id,  f"########## LOOP_VALUE={loop_value}" )
+      etl_utils.log(self.logger_id,  f"######################################################################################################" )
+      
     
 
 
@@ -81,6 +91,7 @@ class ETL:
       self.process_last_time(l_timeout, m_resto)      
 
       qtd  = 0
+      l_saidas_threads = []
       while True:
         etapa = "Loading Data..."
         dados = inn.getData()
@@ -99,9 +110,23 @@ class ETL:
         x   = self.transform(dados, lookups)
 
         etapa = "ProcessOUT..."
-        for saida in l_saidas:
-          saida.execute(x)
 
+        if self.transfer_data_parallel:
+          for louts in l_saidas_threads:
+            louts.join()
+          l_saidas_threads = [
+              threading.Thread(target=lambda s=saida: s.execute(x))
+              for saida in l_saidas
+          ]
+          for t in l_saidas_threads:
+              t.start()          
+        else:
+          for saida in l_saidas:
+            saida.execute(x)
+
+      for louts in l_saidas_threads:
+        louts.join()
+        
       etl_utils.log(self.logger_id,  f"FetchALL={qtd:,}"  )
       self.process_last_time(l_timeout, m_resto,finished=True)
 
@@ -192,13 +217,14 @@ class ETL:
           # Check finished
           if x.is_alive() == False:
             x.join()
-            etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } Status: { x.exitcode } " )
+            msg = f">> INST=[{ x.index }] Finished with Status: { 'SUCCESS' if x.exitcode == 0 else 'FAIL' } - {x.exitcode}"
+            etl_utils.log(self.logger_id,  msg )
             l_thread.remove(x)
 
             if x.exitcode != 0:
               etl_utils.kill_pids( l_thread , logger_id = self.logger_id)
               l_thread.clear()
-              raise Exception( f"Thread INDEX: {x.index} Status: ERROR" )     
+              raise Exception( msg )     
             
         time.sleep(3)
         
@@ -216,12 +242,18 @@ class ETL:
 
   def apply_filter(self, p_code_to_replace):
     ret   = p_code_to_replace
+
+    if self.loop_value != None:
+      ret = ret.replace( "#LOOP_VALUE#", str(self.loop_value) )
     
     for p_param in self.global_vars:
       if p_param != "-":
         dados = json.loads(p_param)
         for l in dados:
-          ret  = ret.replace( f"#{ l }#", str(dados[l]) )
+          if l.startswith("SYS_PARALLEL_TRANS_DATA"):
+            self.transfer_data_parallel = "1" in str(dados[l])
+          else:
+            ret  = ret.replace( f"#{ l }#", str(dados[l]) )
     return ret
 
 

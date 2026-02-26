@@ -92,7 +92,7 @@ def db_execute(sql,params=None, fetch=True):
 
 
 def add_conf(tag, value, nosep=False):
-    svalue = ""    if value == None  else value 
+    svalue = ""    if value == None  else value.strip() 
     sep    = '"""' if "\n" in svalue else '"'
     
     if svalue == "" or len( svalue.strip() ) == 0:
@@ -139,6 +139,21 @@ def create_component(local, config, addin="", index=""):
 
 
 def metricas_log(log_texto: str):
+    loop_value_ret = ""
+
+    if "LOOP_VALUE" in log_texto:
+        linhas = log_texto.splitlines()
+        idx_loop = None
+
+        for i, linha in enumerate(linhas):
+            if "LOOP_VALUE" in linha:
+                match = re.search(r'LOOP_VALUE=([^\]\s]+)', linha)
+                loop_value_ret = f" [ { match.group(1) } ]"
+                idx_loop = i
+
+        if idx_loop is not None:
+            log_texto = "\n".join(linhas[idx_loop:])
+
     # --- Datas ---
     padrao_data = re.compile(
         r'^(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})',
@@ -222,8 +237,7 @@ def metricas_log(log_texto: str):
     else:
         rec_por_seg = 0
 
-    return f"Time: {tempo_decorrido} ".ljust(20) + f"{qtd_text} {total_records:,} ".ljust(25) + f"Speed: {rec_por_seg}/seg ".ljust(20) + f"Files Count: {qtd_files}"
-
+    return f"Time: {tempo_decorrido} ".ljust(20) + f"{qtd_text} {total_records:,} ".ljust(25) + f"Speed: {rec_por_seg}/seg ".ljust(20) + f"Files Count: {qtd_files}", loop_value_ret
 
 
 
@@ -238,7 +252,7 @@ def job_info_memory():
     write_speed = (io2.write_bytes - app.disk_io.write_bytes) / io2_sec  # bytes escritos por segundo
 
     ret  = f"""
-        <table width=600>
+        <table width=700>
         <tr><td></td><td>Total</td><td>Used</td><td>Free</td><td>%</td>
         <tr><td>Mem:</td><td>  { eu.human_readable_size(mem.total) }</td><td>{ eu.human_readable_size(mem.used) }</td><td>{ eu.human_readable_size(mem.free) }</td><td>{mem.percent:.2f}%</td>
         <tr><td>Swap:</td><td> { eu.human_readable_size(swap.total) }</td><td>{ eu.human_readable_size(swap.used) }</td><td>{ eu.human_readable_size(swap.free) }</td><td>{swap.percent:.2f}%</td>
@@ -411,15 +425,15 @@ def job_info_logger_batch_id():
             xx_id += 1
             icone = "▶️"
 
-            log_txt     = log_data[x]
-            log_metrica = metricas_log(log_txt)
+            log_txt             = log_data[x]
+            log_metrica, log_lv = metricas_log(log_txt)
             
-            if "STATUS:OK" in log_txt:
+            if log_txt.strip().endswith("STATUS:OK"):
                 icone = "🟢" 
 
-            if "STATUS:ERRO" in log_txt:
+            if log_txt.strip().endswith("STATUS:ERRO"):
                 icone = "🔴" 
-            ret_header = f"""{icone} <a href=/designer?job_name={x} target=__blank>[edit]</a> - <a onclick=js_log_in_row('{xx_id}') style='cursor:pointer'>{x.ljust(50)}</a> {log_metrica} <hr>"""
+            ret_header = f"""{icone} <a href=/designer?job_name={x} target=__blank>[edit]</a> - <a onclick=js_log_in_row('{xx_id}') style='cursor:pointer'>{ (x + log_lv).ljust(50) }</a> {log_metrica} <hr>"""
             ret_data   = f"<div id=id_log_{ xx_id } style='display:none'>{ log_txt }<hr></div>"
             ret   = ret + ret_header + ret_data
     else:
@@ -462,17 +476,20 @@ def job_info_logger():
 def job_execute():
     job_name            = request.form.get("job_name")
     job_run_parameters  = request.form.get("job_run_parameters").strip().split("\n")
+    job_run_loop_values = request.form.get("job_run_loop_values").strip()
     path_etl            = os.path.dirname(os.path.abspath(__file__))
+    lista               = []
+    env                 = os.environ.copy()
+    if len(job_run_loop_values) > 1:
+        env['LOOP_VALUES'] = job_run_loop_values
 
-    lista = []
-    print(job_run_parameters)
     for x in job_run_parameters:
         if len(x.strip()) > 0:
             a,b = x.split("=",1)
             lista.append( f'''"{a}":"{b}"''' )
 
     batch_id = eu.create_job_batch(job_name=job_name,created_by=session.get("status_login"), managed_by="algaretl", parameters=("{\n" + ",".join(lista) + "\n}") )
-    subprocess.Popen( f"""nohup {path_etl}/etl/job_execute.py { job_name } { session.get("status_login") } {batch_id} &""", shell=True)
+    subprocess.Popen( f"""nohup {path_etl}/etl/job_execute.py { job_name } { session.get("status_login") } {batch_id} &""", shell=True, env=env)
     return {"message" :"Started..." }
 
 
@@ -539,7 +556,7 @@ def job_info_init_values():
     return {"cbo_databases" : l_cbo_databases,
             "cbo_auths_sap" : l_cbo_auths_sap,
             "cbo_projetos"  : l_cbo_projetos,
-            "cbo_boto3"     : l_cbo_boto3    }
+            "cbo_boto3"     : l_cbo_boto3   }
     
 #######################################################################################
 #  
@@ -772,6 +789,15 @@ def job_load():
 # pages
 #######################################################################################
 
+
+@app.route("/doc", methods=["GET", "POST"])
+def doc():
+    eu.load_globals()
+    documentation       = eu.get_param_value("PARAMETERS","DOCUMENTATION")
+    return render_template( 'documentation.html',documentation=documentation )
+
+
+
 @app.route("/error")
 def error():
     return render_template("error.html")
@@ -837,4 +863,4 @@ def index():
 #######################################################################################
 
 if __name__ == "__main__":
-    app.run()
+    app.run(port=8585)

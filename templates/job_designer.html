@@ -2,12 +2,10 @@
 
 <head>
 	<title>Algar ETL</title>
-    <script type="text/javascript" src="/static/js/functions.js"></script>
 	<link rel="StyleSheet" href="/static/styles/style.css" type="text/css">
 
     <script>
         var g_objeto;
-
 
         function js_job_init() {
             var v_parameters        = Object.fromEntries(new URLSearchParams(window.location.search));
@@ -87,9 +85,18 @@
 
         function js_job_execute(tipo) {
             if ( tipo == 1 ) {
-                id_job_run.style.display = 'block';
-                var pars                     = C_JOB_DEF_PARAMETERS.value.trim();
-                id_job_run_parameters.value  = ( pars.length > 0) ? ( pars + "\n").replaceAll("\n","=\n") : "";
+                id_job_run.style.display    = 'block';
+                id_job_run_parameters.value = '';
+                
+                if ( C_JOB_DEF_PARAMETERS.value.trim().length > 0 ) {
+                    var pars                    = C_JOB_DEF_PARAMETERS.value.trim().split("\n");
+                    var pars_fmt                = "";
+
+                    pars.forEach( e => {
+                        pars_fmt = pars_fmt + e + (e.includes("=") ? "" : "=") + "\n";
+                    });
+                    id_job_run_parameters.value  = pars_fmt.trim();
+                }
             } else {
 
                 if ( P_NEWJOB_NAME.value == 'newjob' ) {
@@ -98,9 +105,9 @@
                 }
 
                 if ( confirm("Can execute?" ) ) {
-
+                    var loop_vals = id_job_run_check.checked ? id_job_run_loop_values.value : "";
                     ajax("/info", 
-                         { "name":"job_execute", "job_name": P_NEWJOB_NAME.value, "job_run_parameters": id_job_run_parameters.value }, 
+                         { "name":"job_execute", "job_name": P_NEWJOB_NAME.value, "job_run_parameters": id_job_run_parameters.value, "job_run_loop_values": loop_vals }, 
                          function(a) {
                             alert(a.message);
                             id_job_run.style.display = 'none';
@@ -213,7 +220,7 @@
                             info = key.split(".");
                             document.getElementById(info[0]).attributes[info[1]] = value;
                         }
-                    });
+                    });  
             }, null);
         }
         
@@ -301,37 +308,61 @@
         <button onclick="js_job_execute(1)">Run</button> &nbsp;
         <button onclick="js_job_config_sh(1)">Config Job Sh</button> &nbsp;
         <button onclick="js_job_parameters_ref(1)">Job Parameters</button> &nbsp;
+        <button onclick="window.open('/doc', 'documentation')" style="background:green">Help/Doc</button> &nbsp;
         <div id="id_title_page" class="titles_toolbar"></div>
     </div>
 
 
   <div class="container">
     <div class="div-esquerda">
-				<div class="area">
-<center>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_sql.png       type_obj="sql">     <br>Database <menu1></menu1>    </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_boto3.png     type_obj="boto3">   <br>S3(AWS) <menu1></menu1>      </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_py.png        type_obj="py">      <br>PythonCode <menu2></menu2>   </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_filename.png  type_obj="filename"><br>CSV <menu1></menu1>          </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_xml.png       type_obj="xml">     <br>XML <menu1></menu1>          </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_odata.png     type_obj="odata">   <br>ODATA/SAP <menu2></menu2>   </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_dataset.png   type_obj="dataset"> <br>Dataset <menu4></menu4>     </div><hr>
-    <div class="dropdown"><input class="dropbtn"  type=image src=/static/img/icon_transf.png    type_obj="transf">  <br>Transformer <menu3></menu3> </div>
-</center>
-				</div>
+        <div class="area">
+            <center>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_sql.png type_obj="sql">
+                    <br>Database <menu1></menu1>
+                </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_boto3.png type_obj="boto3">
+                    <br>S3(AWS) <menu1></menu1>
+                </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_py.png type_obj="py">
+                    <br>PythonCode <menu2></menu2>
+                </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_filename.png
+                        type_obj="filename"><br>CSV <menu1></menu1>
+                </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_xml.png type_obj="xml"> <br>XML
+                    <menu1></menu1>
+                </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_odata.png type_obj="odata">
+                    <br>ODATA/SAP <menu2></menu2>
+                </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_dataset.png type_obj="dataset">
+                    <br>Dataset <menu4></menu4>
+                </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_transf.png type_obj="transf">
+                    <br>Transformer <menu3></menu3>
+                </div>
+            </center>
+        </div>
     </div>
 
     <div class="div-direita">
-				<div class="area">
-                            <table class="table_job" width=100%  height="100%" id="id_tabela">
-                                <tr>
-                                    <td align=center width="300" id="id_origin"></td>
-                                    <td align=center width="300" id="id_transf"></td>
-                                    <td align=center width="300" id="id_target"></td>
-                                    <td align=center             id="id_dataset"></td>
-                                </tr>
-                            </table>
-				</div>
+        <div class="area">
+            <table class="table_job" width=100% height="100%" id="id_tabela">
+                <tr>
+                    <td align=center width="300" id="id_origin"></td>
+                    <td align=center width="300" id="id_transf"></td>
+                    <td align=center width="300" id="id_target"></td>
+                    <td align=center id="id_dataset"></td>
+                </tr>
+            </table>
+        </div>
     </div>
 	
   </div>
@@ -453,7 +484,8 @@
                     <td>
                         <select id="C_BOTO3_FORMAT">
                             <option value="txt">txt</option>
-                            <option value="txt_gzip">txt compressed</option>
+                            <option value="txt_gzip">Gzip</option>
+                            <option value="txt_gzip2">Gzip2(testing)</option>
                         </select>   
                     </td>
                 </tr>
@@ -611,10 +643,19 @@
         <div class="itools_modal_content">
             <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
             <h2>Parameters Job</h2>
-            <hr>
-            <textarea id="id_job_run_parameters"></textarea>
-            <hr>
-            <button onClick="js_job_execute(2)">Execute</button>
+            <table>
+                <tr>
+                    <td>Params</td>
+                    <td><textarea id="id_job_run_parameters"></textarea></td>
+                </tr>
+                <tr>
+                    <td>Loop Values</td>
+                    <td><input type="text" id="id_job_run_loop_values" disabled><input type="checkbox" id="id_job_run_check" onclick="id_job_run_loop_values.disabled = !id_job_run_check.checked"></td>
+                </tr>
+                <tr>
+                    <td colspan="2"><button onClick="js_job_execute(2)">Execute</button></td>
+                </tr>
+            </table>
         </div>  
     </div>     
 

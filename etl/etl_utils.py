@@ -12,7 +12,7 @@ import multiprocessing
 import functools
 from datetime import datetime
 
-oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_12")
+oracledb.init_oracle_client()#lib_dir="/opt/oracle/instantclient_21_12")
 
 CONSTANT_OWNER = "DWADM"
 
@@ -374,7 +374,6 @@ def diff_date(d1, d2):
 
 
 def get_param_value(group_name, param_name):
-  print(param_name, group_name)
   global CONSTANT_GLOBALS_parameters  
   return CONSTANT_GLOBALS_parameters[group_name][param_name]
 

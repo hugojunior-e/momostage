@@ -6,6 +6,7 @@ import sqlite3
 import json
 import boto3
 import sys
+import subprocess
 
 import snowflake.connector
 import pandas as pd
@@ -53,6 +54,8 @@ class ETL_OUT:
       self.boto3_fd          = self.value('C_BOTO3_FD')
       self.boto3_file_list   = []
       self.boto3_bucket_data = json.loads( etl_utils.get_param_value("AUTHS.S3", self.value('C_BOTO3_BUCKET')) )
+      self.boto3_MAX_SIZE_MB = 250 if self.boto3_format == "txt_gzip" else 800
+
       
 
     #-----------
@@ -95,13 +98,18 @@ class ETL_OUT:
 
   
   def boto3CheckFileSize(self):
-    tamanho = os.path.getsize( self.boto3_file_local ) / 1024 / 1024
-    if tamanho > 250:
-      if self.fp:
-        self.fp.close()
+    if "gzip" in self.boto3_format:
+      tamanho     = os.path.getsize( self.boto3_file_local ) / 1024 / 1024
+      if tamanho > self.boto3_MAX_SIZE_MB:
+        if self.fp:
+          self.fp.close()
 
-      self.boto3_exists     = False
-      self.fp               = None
+          if self.boto3_format == "txt_gzip2":
+            subprocess.run(["gzip", "-1", self.boto3_file_local], check=True )
+            self.boto3_file_list[ self.boto3_file_list.index(self.boto3_file_local) ] = self.boto3_file_local + ".gz"
+
+        self.boto3_exists     = False
+        self.fp               = None
 
   def boto3SendFiles(self):
       if "__fake__" in self.boto3_filename:
@@ -185,17 +193,16 @@ class ETL_OUT:
       if self.fp == None:
         self.boto3_file_local  = self.boto3NewFileName()
 
-        if "gzip" in self.boto3_format:
+        if self.boto3_format == "txt_gzip":
           self.fp     = gzip.open(self.boto3_file_local,"wt", newline="", encoding='utf-8', compresslevel=1)
         else:
           self.fp     = open(self.boto3_file_local,"w", newline="", encoding='utf-8')
 
         self.myFile = csv.writer(self.fp, lineterminator = '\n', delimiter=self.boto3_fd  , quoting=csv.QUOTE_ALL)
         self.myFile.writerow( self.boto3_fields )
-      self.myFile.writerows( etl_utils.clean_and_convert_tuples(data) )
 
-      if "gzip" in self.boto3_format:
-        self.boto3CheckFileSize()
+      self.myFile.writerows( etl_utils.clean_and_convert_tuples(data) )
+      self.boto3CheckFileSize()
 
 
     # ----------------------------------------

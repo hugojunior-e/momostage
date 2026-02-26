@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="utf-8">
+    <style>
+            /* Container da documentação */
+            pre.doc-system {
+                background: #f8fafc;              /* cinza bem claro */
+                color: #1e293b;                   /* azul escuro suave */
+                padding: 24px;
+                border-radius: 8px;
+                font-family: "Fira Code", "Consolas", "Courier New", monospace;
+                font-size: 14px;
+                line-height: 1.6;
+                overflow-x: auto;
+                white-space: pre;
+                border: 1px solid #e2e8f0;
+            }
+
+            /* Linhas divisórias */
+            pre.doc-system .divider {
+                color: #94a3b8;
+                font-weight: bold;
+            }
+
+            /* Títulos principais */
+            pre.doc-system .section-title {
+                color: #0f172a;
+                font-weight: bold;
+            }
+
+            /* Tokens tipo #VAR# */
+            pre.doc-system .token {
+                color: #b45309;   /* laranja suave */
+                font-weight: 600;
+            }
+
+            /* Sintaxe */
+            pre.doc-system .syntax {
+                color: #0369a1;   /* azul técnico */
+                font-weight: 600;
+            }
+
+            /* Description */
+            pre.doc-system .description {
+                color: #475569;
+                font-weight: 600;
+            }
+
+            /* Palavras importantes */
+            pre.doc-system .highlight {
+                color: #dc2626;
+                font-weight: bold;
+            }
+    </style>
+
+    <script>
+          function formatDocumentation(rawText) {
+              if (!rawText) return "";
+
+              const escapeHtml = (str) =>
+                  str.replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+
+              const lines = rawText.split("\n");
+
+              const formatted = lines.map(line => {
+                  let safeLine = escapeHtml(line);
+
+                  // Divider (linha com muitos ----)
+                  if (/^-{5,}/.test(safeLine.trim())) {
+                      return `<span class="divider">${safeLine}</span>`;
+                  }
+
+                  // Section titles (linha que termina com :)
+                  if (/^[A-Za-z ].+:/.test(safeLine.trim()) && !safeLine.includes("syntax") && !safeLine.includes("description")) {
+                      return `<span class="section-title">${safeLine}</span>`;
+                  }
+
+                  // syntax
+                  if (safeLine.includes("syntax")) {
+                      safeLine = safeLine.replace(/(syntax\s*:)/g, `<span class="syntax">$1</span>`);
+                  }
+
+                  // description
+                  if (safeLine.includes("description")) {
+                      safeLine = safeLine.replace(/(description\s*:)/g, `<span class="description">$1</span>`);
+                  }
+
+                  // Tokens #TOKEN#
+                  safeLine = safeLine.replace(/(#.*?#)/g, `<span class="token">$1</span>`);
+
+                  return safeLine;
+              });
+
+              return formatted.join("\n");
+          }      
+    </script>
+  </head>
+  <body>
+      <pre id="doc" class="doc-system"></pre>
+
+      <script>
+          doc.innerHTML = formatDocumentation(`{{ documentation }}`);
+      </script>
+  </body>
+</html>
