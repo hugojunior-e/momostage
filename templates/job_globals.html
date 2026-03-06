@@ -44,10 +44,10 @@
 		function jsJobGlobalsDetail(x) {
 			id_globals_edit.style.display = 'none';
 
-			ajax("/info", { "name": "tablemodel", "sql": "job_globals.all", "sql_pars": [x] }, function (a) {
-				id_parametros_values.innerHTML = a.message;
-				id_parametros_values.querySelectorAll("table")[0].className = 'table_detail';
+			ajax("/info", { "name": "result_set", "sql": "job_globals.all", "sql_pars": [x] }, function (a) {
 
+				id_parametros_values.innerHTML = "";
+				id_parametros_values.appendChild(to_table(a.data, a.fields));
 				id_parametros_values.querySelectorAll("tr").forEach((e, idx) => {
 					if (idx > 0) {
 						e.cells[0].value = e.cells[0].innerHTML;
@@ -120,9 +120,9 @@
 
 
 	<script>
-		ajax("/info", { "name": "tablemodel", "sql": "job_globals.group_name", "sql_pars": [] }, function (a) {
-			id_parametros.innerHTML = a.message;
-			id_parametros.querySelectorAll("table")[0].className = 'table_detail';
+		ajax("/info", { "name": "result_set", "sql": "job_globals.group_name", "sql_pars": [] }, function (a) {
+			id_parametros.innerHTML = "";
+			id_parametros.appendChild(to_table(a.data, a.fields));
 			id_parametros.querySelectorAll("tr").forEach((e, idx) => {
 				if (idx > 0)
 					e.cells[0].innerHTML = "<a href=# onclick=jsJobGlobalsDetail('" + e.cells[0].innerHTML + "') >" + e.cells[0].innerHTML + "</a>";

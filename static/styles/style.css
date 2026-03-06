@@ -293,3 +293,31 @@ a:hover {
   border-bottom: 1pt solid #00000040;
   height: 30px;
 }
+
+
+
+
+
+.gauge{
+    width:130px;
+    height:130px;
+    aspect-ratio: 1 / 1;
+    border-radius:50%;
+    border:5px solid #4caf50;
+    display:grid;
+    place-items:center;   /* centraliza horizontal e vertical */
+}
+
+.gauge-content{
+    text-align:center;
+}
+
+.gauge-content h2{
+    margin:0;
+    font-size:24px;
+}
+
+.gauge-content span{
+    font-size:12px;
+    color:#666;
+}

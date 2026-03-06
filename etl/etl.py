@@ -190,13 +190,25 @@ class ETL:
       while len(l_thread) > 0:
         for idx_x, x in enumerate(l_thread):
 
+          # Check finished
+          if x.is_alive() == False:
+            x.join()
+            msg = f">> INST=[{ x.index }] Finished with status = { 'SUCCESS' if x.exitcode == 0 else 'FAIL' } status_code = {x.exitcode}"
+            etl_utils.log(self.logger_id,  msg )
+            l_thread.remove(x)
+
+            if x.exitcode != 0:
+              etl_utils.kill_pids( l_thread , logger_id = self.logger_id, reason="Abnormal Execution")
+              l_thread.clear()
+              raise Exception( msg )               
+            
           # Check timeout
-          if list_proc[x.index].get("finished") == False:
+          elif list_proc[x.index].get("finished") == False:
             if ( time.time() - list_proc[x.index].get("dt") ) > etl_utils.CONSTANT_TIMEOUT_THREAD:
-              # Timeout reached
               if x.first_start == True:
-                etl_utils.kill_pids( [ x ] , logger_id = self.logger_id)
                 etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } First timeout reached. Extending time..." )
+
+                etl_utils.kill_pids( [ x ] , logger_id = self.logger_id, reason="First Timeout Reached")
 
                 tt                 = multiprocessing.Process(target=self.process_run, args=( x.index,qtd_mod,list_proc, ) )
                 tt.index           = x.index
@@ -206,27 +218,15 @@ class ETL:
                 l_thread[idx_x]  = tt
                 list_proc[idx_x] = { "dt":time.time(), "finished":False }
 
-                continue
+              else:
+                etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } Timeout reached. Killing all threads..." )
+                etl_utils.kill_pids( l_thread , logger_id = self.logger_id, reason="Timeout")
+                l_thread.clear()
+                if list_proc[x.index].get("finished") == False:
+                  raise Exception( f"Thread INDEX: { x.index } Status: TIMEOUT" )
 
-              etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } Timeout reached. Killing all threads..." )
-              etl_utils.kill_pids( l_thread , logger_id = self.logger_id)
-              l_thread.clear()
-              if list_proc[x.index].get("finished") == False:
-                raise Exception( f"Thread INDEX: { x.index } Status: TIMEOUT" )
-
-          # Check finished
-          if x.is_alive() == False:
-            x.join()
-            msg = f">> INST=[{ x.index }] Finished with Status: { 'SUCCESS' if x.exitcode == 0 else 'FAIL' } - {x.exitcode}"
-            etl_utils.log(self.logger_id,  msg )
-            l_thread.remove(x)
-
-            if x.exitcode != 0:
-              etl_utils.kill_pids( l_thread , logger_id = self.logger_id)
-              l_thread.clear()
-              raise Exception( msg )     
             
-        time.sleep(3)
+        time.sleep(2)
         
     etl_utils.log(self.logger_id, "Executing OUT.after" )
     for idx in range( self.config_target['C_OUT_COUNT'] ):

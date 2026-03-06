@@ -72,9 +72,9 @@
 		function jsSequenceDetail(x) {
 			id_sequence_edit.style.display = 'none';
 
-			ajax("/info", { "name": "tablemodel", "sql": "job_sequences.all", "sql_pars": [x] }, function (a) {
-				id_sequences_jobs.innerHTML = a.message;
-				id_sequences_jobs.querySelectorAll("table")[0].className = 'table_detail';
+			ajax("/info", { "name": "result_set", "sql": "job_sequences.all", "sql_pars": [x] }, function (a) {
+				id_sequences_jobs.innerHTML = "";
+				id_sequences_jobs.appendChild(to_table(a.data, a.fields));
 
 				id_sequences_jobs.querySelectorAll("tr").forEach((e, idx) => {
 					if (idx > 0) {
@@ -142,8 +142,9 @@
 
 
 	<script>
-		ajax("/info", { "name": "tablemodel", "sql": "job_sequences", "sql_pars": [] }, function (a) {
-			id_sequences.innerHTML = a.message;
+		ajax("/info", { "name": "result_set", "sql": "job_sequences", "sql_pars": [] }, function (a) {
+			id_sequences.innerHTML = "";
+			id_sequences.appendChild(to_table(a.data, a.fields));
 			id_sequences.querySelectorAll("table")[0].className = 'table_detail';
 			id_sequences.querySelectorAll("tr").forEach((e, idx) => {
 				if (idx > 0)

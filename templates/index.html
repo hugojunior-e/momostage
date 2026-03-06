@@ -7,18 +7,14 @@
 	<script type="text/javascript" src="/static/js/tree.js"></script>
 
 	<script type="text/javascript">
-		function jsShowPidDetail(pid) {
-			const elementos = document.querySelectorAll('[id^="pid' + pid + '"]');
-			elementos.forEach(el => {
-				el.style.display = el.style.display == 'none' ? '' : 'none';
-			});
-		}
-
 		function jsCheckAbort(x) {
-			ajax("/info", { "name": "check_abort", "batch_id":x, "sql_pars": [] }, function (a) {
-				alert( a.message );
-				ttr = Array.from(id_table_proc.querySelectorAll('a')).filter( eel => eel.innerText.trim() === ("" + x) ) [0];
-				ttr.parentNode.parentNode.remove();
+			ajax("/info", { "name": "check_abort", "batch_id":x, "user_id": "{{ login }}" }, function (a) {
+				if ( a.status_code == 0 ) {
+					ttr = Array.from(id_table_proc.querySelectorAll('a')).filter( eel => eel.innerText.trim() === ("" + x) ) [0];
+					ttr.parentNode.parentNode.remove();
+				} else {
+					alert( a.message );
+				}
 			}, null);
 
 		}
@@ -26,24 +22,44 @@
 		function list_process_running() {
 
 			ajax("/info", { "name": "dashboard_index", "sql_pars": [] }, function (a) {
-				document.all.id_memory.innerHTML = a.memory.message;
-				document.all.id_memory.querySelectorAll("table")[0].className = 'table_detail';
+				id_memory.innerHTML = ""
+				id_memory.appendChild(to_table(a.memory.data, a.memory.fields));
+				id_gauge1.innerHTML = a.memory.gauge1;
+				id_gauge2.innerHTML = a.memory.gauge2;
+				
+				id_gauge1.parentElement.style.borderColor = '';
+				const cpu_value = parseInt( id_gauge1.getElementsByTagName("H2")[0].innerText );
+				if (cpu_value >= 70) {
+					id_gauge1.parentElement.style.borderColor = 'orange';
+				}
+				if (cpu_value >= 100) {
+					id_gauge1.parentElement.style.borderColor = 'red';
+				}
 
-				document.all.id_process_running.innerHTML = a.process_running.message;
-				document.all.id_process_running.querySelectorAll("table")[0].className = 'table_detail';
+				id_process_running.innerHTML = "";
+				id_process_running.appendChild(to_table(a.process_running.data, a.process_running.fields));				
+				id_process_running.querySelectorAll("tr").forEach( (row, index) => {
+					if ( index > 0 ) {
+						row.cells[6].innerHTML = `<a href=# onclick="jsKillProcess('${ row.cells[0].innerHTML }')">kill</a>`;
+					}
+				});
 
-
-				document.all.id_process_aborted.innerHTML = a.process_aborted.message;
-				document.getElementById('id_table_proc').className = 'table_detail';
-				document.getElementById('id_table_proc').querySelectorAll("tr").forEach( (row, index) => {
+			
+				id_process_aborted.innerHTML = "";
+				id_process_aborted.appendChild(to_table(a.process_aborted.data, a.process_aborted.fields));				
+				id_process_aborted.querySelectorAll("tr").forEach( (row, index) => {
+					
 					if ( index > 0 ) {
 						if (row.cells[4].innerHTML != "ALGARSCHEDULER") {
 							row.cells[1].innerHTML = '<a href="/designer?job_name=' + row.cells[1].innerHTML + '" target=__blank>' + row.cells[1].innerHTML + '</a>';
 						}
 
-						row.cells[6].innerHTML = "-";
+						const td_check = document.createElement("td");
+						td_check.textContent = "-";
+						row.appendChild(td_check);						
+
 						if (row.cells[0].innerHTML == "A") {
-							row.cells[6].innerHTML = '<a href=# onclick=jsCheckAbort(' + row.cells[2].innerHTML + ')>check</a>';
+							td_check.innerHTML = '<a href=# onclick=jsCheckAbort(' + row.cells[2].innerHTML + ')>check</a>';
 						}
 
 						row.cells[2].innerHTML = '<a href=/logger?batch_id=' + row.cells[2].innerHTML + ' target=logger_' +  row.cells[2].innerHTML + '>' + row.cells[2].innerHTML + '</a>';
@@ -51,10 +67,8 @@
 						if (row.cells[0].innerHTML == "A") row.cells[0].innerHTML = ICO_ERROR;
 						if (row.cells[0].innerHTML == "E") row.cells[0].innerHTML = ICO_RUNNING;
 						if (row.cells[0].innerHTML == "K") row.cells[0].innerHTML = ICO_WARNING;
-
 					}
-				});				
-
+				});	
 			}, null);
 		}
 
@@ -65,8 +79,8 @@
 
 
 		function jsKillProcess(pid) {
-			if (confirm("Are you sure you want to kill the process " + pid + "?")) {
-				ajax("/info", { "name": "kill_process", "pid": pid }, function (a) {
+			if (confirm("Are you sure you want to kill the process " + pid + " ?")) {
+				ajax("/info", { "name": "kill_process", "pid": pid, "user_id": "{{ login }}" }, function (a) {
 					alert(a.message);
 				}, null);
 			}
@@ -74,8 +88,9 @@
 		}
 
 		function list_tree_view() {
-				ajax("/info", { "name": "list_treeview" }, function (a) {
-					ret = window.treeview.montaArvoreDados(a.message);
+				ajax("/info", { "name": "result_set", "sql": "job_treeview", "sql_pars": []  }, function (a) {
+					const resultado = a.data.map(linha => linha[0]).join("\n");
+					ret = window.treeview.montaArvoreDados(resultado);
 					id_treeview.innerHTML = ret;
 
 				}, null);
@@ -99,8 +114,9 @@
 		}
 
 		function jsFindJobList() {
-			ajax("/info", { "name": "tablemodel", "sql": "job_find_all_jobs", "sql_pars": [ id_job_find_name.value ] }, function (a) {
-				id_job_find_list.innerHTML = a.message;
+			ajax("/info", { "name": "result_set", "sql": "job_find_all_jobs", "sql_pars": [ id_job_find_name.value ] }, function (a) {
+				id_job_find_list.innerHTML = "";
+				id_job_find_list.appendChild(to_table(a.data, a.fields));				
 
 				id_job_find_list.querySelectorAll("tr").forEach((e, idx) => {
 					if (idx > 0) {
@@ -135,7 +151,25 @@
 		<div class="div-direita">
 			<div class="area">
 				<span class="titulo">Memory|Disk|CPU|IO Monitor </span>
-				<div class="div_pre" id="id_memory"></div>
+				<div class="div_pre">
+					<table width="100%">
+						<tr>
+							<td id="id_memory"></td>
+							<td width="5">
+								<div class="gauge" {cpu_background}>
+									<div class="gauge-content" id="id_gauge1">
+									</div>
+								</div>
+							</td>
+							<td width="5">
+								<div class="gauge">
+									<div class="gauge-content"  id="id_gauge2">
+									</div>
+								</div>  								
+							</td>
+						</tr>
+					</table>
+				</div>
 				<br>
 		
 				<span class="titulo">Process Running Now (SO)</span>

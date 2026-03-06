@@ -12,7 +12,24 @@ import multiprocessing
 import functools
 from datetime import datetime
 
-oracledb.init_oracle_client()#lib_dir="/opt/oracle/instantclient_21_12")
+oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_12")
+
+
+#=======================================================================================================
+#
+#=======================================================================================================
+
+def local_db():
+   x = oracledb.connect(dsn="(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-stg.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWHOM)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))", user="dwadm", password="dwtst")
+   return x
+
+
+#=======================================================================================================
+#
+#=======================================================================================================
+
+
+CONSTANT_GLOBALS_parameters = {}
 
 CONSTANT_OWNER = "DWADM"
 
@@ -130,6 +147,7 @@ DECLARE
   v_id        NUMBER;
   v_pars      VARCHAR2(2000);
   v_key_value VARCHAR2(200);
+  v_key_name  VARCHAR2(200);
   v_comma     NUMBER;
 BEGIN
   SELECT {CONSTANT_OWNER}.ms_job_batch_seq.nextval
@@ -167,8 +185,7 @@ BEGIN
                 AND s.job_name   = b.JOB_NAME
                 AND def.JOB_NAME = b.JOB_NAME
                 and def.reg_sts  = 1
-                AND s.PARAMETERS IS NOT NULL
-                AND def.PARAMETERS IS NOT NULL
+                AND ( s.PARAMETERS IS NOT NULL or def.PARAMETERS IS NOT NULL )
             ) LOOP
     v_pars  := chr(123) || chr(10);
     v_comma := 0;
@@ -177,14 +194,22 @@ BEGIN
                  LEVEL <= REGEXP_COUNT(cx.keys, CHR(10)) + 1
              ) 
     LOOP
-      EXECUTE IMMEDIATE json_value(cx.parameters,'$.' || k.kkey)
-        INTO v_key_value;
-        
+      if k.kkey like '%=%' then
+          v_key_name  := substr(cx.keys, 1, instr(cx.keys, '=') - 1);
+          v_key_value := substr(cx.keys, instr(cx.keys, '=') + 1);
+      else
+          v_key_name := k.kkey;  
+
+          EXECUTE IMMEDIATE json_value(cx.parameters,'$.' || k.kkey)
+            INTO v_key_value;
+      end if;    
+
+
       IF ( v_comma = 1 ) THEN
         v_pars := v_pars || ',';
       END IF;
       
-      v_pars  := v_pars || '"' || k.kkey || '":"' || v_key_value || '"';
+      v_pars  := v_pars || '"' || v_key_name || '":"' || v_key_value || '"';
       v_comma := 1;
     END LOOP;
 
@@ -253,15 +278,54 @@ AS_VERIFICA_PENDENTES = f"""
   select count(1) from {CONSTANT_OWNER}.ms_job_batch where id = $p_lote_id$ and status not in ('K', 'F')
 """
 
-CONSTANT_GLOBALS_parameters = {}
 
-#=======================================================================================================
-#
-#=======================================================================================================
 
-def local_db():
-   x = oracledb.connect(dsn="(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=exa03-scan-stg.network.ctbc)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=DWHOM)(FAILOVER_MODE=(TYPE=SELECT)(METHOD=BASIC)(RETRIES=180)(DELAY=5))))", user="dwadm", password="dwtst")
-   return x
+def asVerificaPendentes( p_lote ):
+  db  = local_db()
+  cur = db.cursor()
+  cur.execute( AS_VERIFICA_PENDENTES.replace("$p_lote_id$",str(p_lote)))
+  ret = cur.fetchone()[0]
+  cur.close()
+  db.close()
+  return ret
+
+
+def asExecutaViewJobsAgenda( p_lote ):
+  db    = local_db()
+  view  = AS_JOBS_AGENDA.replace("$p_lote$",str(p_lote))
+  cur   = db.cursor()
+  cur.execute( view )
+  lst_resultado = cur.fetchall()
+  cur.close()
+  db.close()      
+  return lst_resultado
+
+
+def asVerificaLote( p_lote ):
+  db    = local_db()
+  cur   = db.cursor()
+  sql_  = AS_VERIFICA_LOTE.replace("$p_lote$",str(p_lote))
+  cur.execute( sql_ )
+  ret = cur.fetchall()
+  cur.close()
+  db.close()      
+  return ret
+
+
+def asGeraLoteExecucao( agrupamento ):
+  query = AS_GERA_LOTE.replace("$AGRUPAMENTO$",agrupamento)
+  db    = local_db()
+  cur   = db.cursor()
+  n     = cur.var(int)
+  cur.execute(query, {"id":n})
+  p_lote = n.getvalue()  
+  cur.close()
+  db.close() 
+  return p_lote
+
+
+
+
 
 #=======================================================================================================
 #
@@ -284,38 +348,6 @@ def load_globals():
   cur.close()
   db.close()
 
-
-#=======================================================================================================
-#
-#=======================================================================================================
-
-
-def timeout(seconds=10, msg_on_error="Tempo limite atingido"):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            q = multiprocessing.Queue()
-
-            def target():
-                try:
-                    q.put(func(*args, **kwargs))
-                except Exception as e:
-                    q.put(e)
-
-            p = multiprocessing.Process(target=target)
-            p.start()
-            p.join(seconds)
-
-            if p.is_alive():
-                p.terminate()
-                raise TimeoutError(msg_on_error)
-
-            result = q.get() if not q.empty() else None
-            if isinstance(result, Exception):
-                raise result
-            return result
-        return wrapper
-    return decorator
 
 #=======================================================================================================
 #
@@ -363,7 +395,6 @@ def _do_connect_(dbname,timeout=10):
   return con
 
 
-#@timeout(seconds=15)        
 def connect_db(dbname):
   return _do_connect_(dbname,10)
 
@@ -524,11 +555,11 @@ def human_readable_size(size_bytes):
     return f"{size_bytes:.2f} {units[i]}"
 
 
-def kill_pids(list_pids, logger_id = None):
+def kill_pids(list_pids, logger_id = None, reason = "-"):
   for x in list_pids:
     try:
       os.kill(x.pid, 9)
       if logger_id:
-         log(logger_id, f"Killed PID { x.pid }" )
+         log(logger_id, f"Killed PID { x.pid } by reason { reason }" )
     except Exception as e:
       pass

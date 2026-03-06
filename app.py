@@ -3,6 +3,7 @@
 import etl.etl_utils as eu
 import subprocess
 import os
+import glob
 import psutil
 import time
 import re
@@ -163,12 +164,15 @@ def metricas_log(log_texto: str):
 
     if len(datas) < 2:
         tempo_decorrido = None
-        tempo_segundos = 0
     else:
-        inicio = datetime.strptime(datas[0], "%d/%m/%Y %H:%M:%S")
-        fim    = datetime.strptime(datas[-1], "%d/%m/%Y %H:%M:%S")
-        tempo_decorrido = fim - inicio
-        tempo_segundos = tempo_decorrido.total_seconds()
+        inicio     = datetime.strptime(datas[0], "%d/%m/%Y %H:%M:%S")
+        fim        = datetime.strptime(datas[-1], "%d/%m/%Y %H:%M:%S")
+        fim_online = fim
+
+        if not log_texto.strip().endswith("STATUS:OK") and not log_texto.strip().endswith("STATUS:ERRO"):
+            fim_online = datetime.now().replace(microsecond=0)
+
+        tempo_decorrido = fim_online - inicio
 
     # --- Últimos valores ---
     ult_qtd_parc = {}
@@ -232,8 +236,11 @@ def metricas_log(log_texto: str):
     qtd_files = len(re.findall(r'Generated File:', log_texto))
 
     # --- Throughput ---
-    if tempo_segundos > 0:
-        rec_por_seg = int(total_records / tempo_segundos)
+    tempo_rec     = fim - inicio
+    tempo_rec_seg = tempo_rec.total_seconds()
+
+    if tempo_rec_seg > 0:
+        rec_por_seg = int(total_records / tempo_rec_seg)
     else:
         rec_por_seg = 0
 
@@ -242,60 +249,74 @@ def metricas_log(log_texto: str):
 
 
 def job_info_memory():
-    mem   = psutil.virtual_memory()
-    swap  = psutil.swap_memory()
-    usage = psutil.disk_usage('/app')
+    titulo   = ["", "total", "used", "free", "%"]
+
+    mem         = psutil.virtual_memory()
+    swap        = psutil.swap_memory()
+    usage       = psutil.disk_usage('/app')
     io2         = psutil.disk_io_counters()
     io2_now     = datetime.now()
     io2_sec     = (io2_now - app.disk_io_now).total_seconds()
-    read_speed  = (io2.read_bytes - app.disk_io.read_bytes) / io2_sec  # bytes lidos por segundo
-    write_speed = (io2.write_bytes - app.disk_io.write_bytes) / io2_sec  # bytes escritos por segundo
+    read_speed  = (io2.read_bytes - app.disk_io.read_bytes) / io2_sec
+    write_speed = (io2.write_bytes - app.disk_io.write_bytes) / io2_sec
 
-    ret  = f"""
-        <table width=700>
-        <tr><td></td><td>Total</td><td>Used</td><td>Free</td><td>%</td>
-        <tr><td>Mem:</td><td>  { eu.human_readable_size(mem.total) }</td><td>{ eu.human_readable_size(mem.used) }</td><td>{ eu.human_readable_size(mem.free) }</td><td>{mem.percent:.2f}%</td>
-        <tr><td>Swap:</td><td> { eu.human_readable_size(swap.total) }</td><td>{ eu.human_readable_size(swap.used) }</td><td>{ eu.human_readable_size(swap.free) }</td><td>{swap.percent:.2f}%</td>
-        <tr><td>/app:</td><td> { eu.human_readable_size(usage.total) }</td><td>{ eu.human_readable_size(usage.used) }</td><td>{ eu.human_readable_size(usage.free) }</td><td>{usage.percent:.2f}%</td>
-        <tr><td>CPU Load:</td>
-            <td colspan=4>{psutil.getloadavg()} - {psutil.cpu_count()} cpus </td>
-        </tr>
-        <tr><td>IO Write / Read:</td>
-            <td colspan=2>{write_speed / (1024 * 1024):.2f} MB/s</td>
-            <td colspan=2>{read_speed / (1024 * 1024):.2f} MB/s</td>
-        </tr>
-        </table> 
-    """  
+    a,b,c            = psutil.getloadavg()
+    d                = a/psutil.cpu_count()*100
     app.disk_io      = io2
     app.disk_io_now  = io2_now
-    return {"message":ret}
+
+    infos = [
+        ["Mem:", eu.human_readable_size(mem.total), eu.human_readable_size(mem.used), eu.human_readable_size(mem.free), f"{mem.percent:.2f}%" ],
+        ["Swap:", eu.human_readable_size(swap.total), eu.human_readable_size(swap.used), eu.human_readable_size(swap.free) , f"{swap.percent:.2f}%" ],
+        ["/app:", eu.human_readable_size(usage.total), eu.human_readable_size(usage.used), eu.human_readable_size(usage.free), f"{usage.percent:.2f}%"]
+    ]
+
+    return {"data"  : infos, 
+            "fields": titulo, 
+            "gauge1": f"<span>CPU%</span><h2>{ round(d,2) }</h2><span>{a:.2f},{b:.2f},{c:.2f}<br>{psutil.cpu_count()}</span>", 
+            "gauge2": f"<h2>IO</h2>R: {read_speed/1024/1024:.2f} MB/s<br>W: {write_speed/1024/1024:.2f} MB/s" 
+    }
 
 
 def job_info_last_abort():
-    title    = "<tr><td>#</td><td>name</td><td>id batch</td><td>started at</td><td>managed by</td><td>time</td><td>#</td></tr>"  
+    titulo   = ["#", "name", "batch_id", "started_at", "managed_by", "time", ""]
+    sql      = db_sql("job_get_last_executions")
+    data     = db_execute(sql)
+    return {"data":data.data, "fields": titulo}
 
-    sql   = db_sql("job_get_last_executions")
-    dados = db_execute(sql)
-    ret = []
-    for x in dados.data:
-        bits = [ "" if a == None else str(a) for a in x ]
-        bits.append("check")
-        ret.append( "<tr><td>" + "</td><td>".join(bits) + "</td></tr>" )
-    ret = f"<table width=100% id=id_table_proc>{title}" + "".join(ret) + "</table>"
-    return {"message":ret}
+
 
 
 def job_info_kill_process():
     pid = request.form.get("pid")
+    uid = request.form.get("user_id")
     if pid != None and pid != "":
-        subprocess.run( f"ps -eo pid,ppid | awk '$1 == {pid} || $2 == {pid} {{ print $1 }}' | xargs -r kill -9", shell=True )
+        p   = psutil.Process( int(pid) )
+        cmd = " ".join(p.cmdline())
+        if "job_execute" in cmd:
+            subprocess.run( f"ps -eo pid,ppid | awk '$1 == {pid} || $2 == {pid} {{ print $1 }}' | xargs -r kill -9", shell=True )
+        else:
+            eu.load_globals()
+            users_permit = eu.get_param_value("PARAMETERS","KILL_PROCESS")
+            if uid.upper() in users_permit:
+                seq =  p.cmdline()[-1]
+                subprocess.run( f"pgrep -f { seq } | xargs kill -9", shell=True )
+                arquivos = glob.glob( f"/home/producao/DW/py/lock/*{ seq }*lock" )
+                for arquivo in arquivos:
+                    os.remove(arquivo)
+            else:
+                return {"message" : "User not permited kill process"}            
         ret = f"Process {pid} killed."
     return {"message":ret}
 
 
+
+
+
 def job_info_process_running():
-    lista_as  = []
-    tabela    = "<td>pid</td><td>ppid</td><td>start</td><td>%mem</td><td>pcpu</td><td>command</td>"  
+    titulo   = ["pid", "ppid", "start", "%mem", "pcpu", "command", ""]
+    data     = []
+    lista_as = []
 
     for proc in psutil.process_iter(['pid', 'ppid', 'name', 'username', 'cpu_percent', 'memory_percent']):
         start_time = datetime.fromtimestamp(proc.create_time()).strftime("%d/%m/%Y %H:%M:%S")
@@ -309,39 +330,17 @@ def job_info_process_running():
         memory_percent = proc.info['memory_percent']
 
         if is_mms or is_as:
-            pid_kill = ""
-            pid_show = ""
-            pid_link = ""
-
-            if is_mms and ppid > 1:
-                pid_show = f""" id=pid{ ppid } style="display:none" """
-            
-            mem     = ( f"{ memory_percent }" ).split(".")
-            mem_fmt = mem[0] + "." + mem[1][0:2]
-            name_pc = " ".join(proc_cmd[2 if is_mms else 3:])
-
-            if " " in name_pc:
-                pid_kill = f"""<a href=# onclick="jsKillProcess('{ pid }')"   > kill </a>"""
-                pid_link = f"""<a href=# onclick="jsShowPidDetail({  pid  })" > show </a>"""
-
+            mem      = ( f"{ memory_percent }" ).split(".")
+            mem_fmt  = mem[0] + "." + mem[1][0:2]
+            name_pc  = " ".join(proc_cmd[2 if is_mms else 3:])
             if name_pc not in lista_as:
-                tabela = f"""
-                    {tabela}
-                    <tr {pid_show}> 
-                        <td>{ pid          }</td>
-                        <td>{ ppid         }</td>
-                        <td>{ start_time   }</td>
-                        <td>{ mem_fmt      }</td>
-                        <td>{ cpu_percent  }</td>
-                        <td>{ name_pc      }</td>
-                        <td>{ pid_kill} {pid_link}</td>
-                    </tr>
-                """
-                if is_as:
-                    lista_as.append( name_pc )
+                data.append( [pid, ppid, start_time, mem_fmt, cpu_percent, name_pc, ""] )
+            lista_as.append( name_pc )
 
-    ret =  "<table width=100%>" + tabela + "</table>"    
-    return {"message":ret}
+    return {"data":data, "fields": titulo}
+
+
+
 
 
 def job_info_sequence_save():
@@ -373,29 +372,14 @@ def job_info_globals_save():
     return { "message": "OK" }
 
 
-def job_info_tablemodel():
+def job_info_result_set():
     sql        = db_sql(request.form.get("sql"))
     sql_pars   = request.form.get("sql_pars").split("|")
-    lista_pars = []
     for i,x in enumerate(sql_pars):
         sql = sql.replace( f"<{i+1}>", x)
 
     ret = db_execute(sql)    
-    for idx,x in enumerate(ret.data):
-        if idx == 0:
-            l = "<tr>"
-            for col in ret.fields:
-                l = l + "<td id=_><b>" + col + "</b></td>"
-            l = l + "</tr>"
-            lista_pars.append(l)
-
-        l = "<tr>"
-        for col in x:
-            l = l + "<td>" + ("" if col == None else str(col)) + "</td>"
-        l = l + "</tr>"
-        lista_pars.append(l)
-
-    return {"message": "<table width=100%>" + "".join(lista_pars) + "</table>" }
+    return {"data":ret.data, "fields":ret.fields}
 
 
 def job_info_logger_batch_id():
@@ -439,38 +423,13 @@ def job_info_logger_batch_id():
     else:
         ret = "Logfile not found!"
         
-    return { "message": "<table class=table_detail>" + ret + "</table>" }
+    return { "message": ret }
 
 
 def job_info_logger_big():
     sql = db_sql("job_logger_big", [request.form.get("rid")])
     x   = db_execute(sql).data
     return { "message": x[0][0].read() }
-
-
-def job_info_logger_lotes():
-    job_name = request.form.get("job_name")
-    sql      = db_sql("job_logger_lotes", [job_name])
-    ret      = ""
-    for x in db_execute(sql).data:
-        ret = ret + f'<li> <a href=/logger?batch_id={x[0]}&job_name={job_name} target=logger_{x[0]}> {x[0]}  </a> - {x[1]}'
-    return { "message": ret }
-
-
-def job_info_logger():
-    sql = db_sql("job_logger", [request.form.get("job_logger_id")])
-    ret = ""
-    j   = "-"
-
-    for x in db_execute(sql).data:
-        if j != x[0]:
-            ret = ret + x[0] + "<hr>"
-        info = x[2].strip()
-        if x[3] == 1:
-            info = f"""<a href=# onclick="js_log_big_view('{x[4]}')"> {info} </a> """
-        ret = ret + x[1] + "  " + info + "\n" 
-        j   = x[0]
-    return {"message": ret }
 
 
 def job_execute():
@@ -493,26 +452,30 @@ def job_execute():
     return {"message" :"Started..." }
 
 
+
+
 def job_sequence_start():
     seq_name = request.form.get("SEQ_NAME")
     print(f"""nohup /home/producao/DW/py/ALGAR_PRD_ExecGen.py -P {seq_name} &""")
     subprocess.Popen( f"""nohup /home/producao/DW/py/ALGAR_PRD_ExecGen.py -P {seq_name} &""", shell=True)
     return {"message": "Sequence started."}
 
+
+
 def job_info_check_abort():
     batch_id = request.form.get("batch_id")
-    sql      = db_sql("job_check_abort", [batch_id])
-    db_execute(sql,fetch=False)
-    return { "message": "OK" }
-
-
-def job_list_treeview():
-    sql     = db_sql("job_treeview")
-    x       = ""
-    for y in db_execute(sql).data:
-        x = x + "\n" + y[0]
-    return { "message": x.strip() }
-
+    userId   = request.form.get("user_id")
+    eu.load_globals()
+    users_permit = eu.get_param_value("PARAMETERS","OPERATION_CHECK")
+    if userId.upper() in users_permit:
+        sql      = db_sql("job_check_abort", [batch_id,userId])
+        try:
+            db_execute(sql,fetch=False)
+        except Exception as e:
+            return { "status_code": "1", "message": str(e) }
+        return { "status_code": "0", "message": "OK" }
+    else:
+        return { "status_code": "1", "message": "User not permit check aborted process!" }
 
 def job_info_detect_fields():
     eu.load_globals()
@@ -525,7 +488,6 @@ def job_info_detect_fields():
         tt   = eu.connect_db(db_name)
         cc   = tt.cursor()
         cc.execute("SELECT * FROM (\n" + db_sql.replace("#MOD#","0").replace("#RESTO#","0") + "\n) where 1=2")
-        #ret = "\n".join( [ (desc[0].ljust(50) + str(desc[1])) for desc in cc.description] )
         ret = "\n".join( [ desc[0] for desc in cc.description] )
     except Exception as e:
         ret = str(e)
@@ -546,6 +508,7 @@ def test_connection():
     except Exception as e:
         return {"message": f"Error connecting to {db_name}: {str(e)}"}
     
+
 def job_info_init_values():
     sql                 = db_sql("job_combobox")
     l_cbo_databases     = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'DATABASES'  )).data]   )
@@ -580,35 +543,17 @@ def info():
     if name == "job_globals_save":
         return job_info_globals_save()
 
-    if name == "memory":
-        return job_info_memory()
-
-    if name == "process_aborted":
-        return job_info_last_abort()
-
     if name == "kill_process":
         return job_info_kill_process()
 
-    if name == "process_running":
-        return job_info_process_running()
-
-    if name == "tablemodel":
-        return job_info_tablemodel()
+    if name == "result_set":
+        return job_info_result_set()
 
     if name == "log_batch_id":
         return job_info_logger_batch_id()
 
     if name == "log_big":
         return job_info_logger_big()
-
-    if name == "log_lotes":
-        return job_info_logger_lotes()
-    
-    if name == "list_treeview":
-        return job_list_treeview()
-
-    if name == "log":
-        return job_info_logger()
 
     if name == "job_execute":
         return job_execute()
@@ -827,6 +772,7 @@ def logout():
 def job_logger():
     return render_template( 'job_logger.html' )
 
+
 @app.route("/sequences")
 def job_sequences():
     if not session.get("status_login"):
@@ -863,4 +809,4 @@ def index():
 #######################################################################################
 
 if __name__ == "__main__":
-    app.run(port=8585)
+    app.run()

@@ -136,3 +136,32 @@ function js_create_menu_add(local = []) {
     ret += '</div>';
     return ret;
 }
+
+
+
+function to_table(dados, titulos) {
+    // Cria container principal
+    const tabela = document.createElement("table");
+    tabela.className = 'table_detail';
+    tabela.style.width = "100%";
+    // ===== HEADER =====
+    const row1 = document.createElement("tr");
+    titulos.forEach(titulo => {
+        const cell = document.createElement("td");
+        cell.innerHTML = "<b>" + titulo + "</b>";
+        row1.appendChild(cell);
+    });
+    tabela.appendChild(row1);
+
+    // ===== DADOS =====
+    dados.forEach(linha => {
+        const row = document.createElement("tr");
+        linha.forEach(coluna => {
+            const cell = document.createElement("td");
+            cell.textContent = coluna;
+            row.appendChild(cell);
+        });
+        tabela.appendChild(row);
+    });
+    return tabela;
+}  

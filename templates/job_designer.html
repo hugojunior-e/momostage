@@ -3,7 +3,8 @@
 <head>
 	<title>Algar ETL</title>
 	<link rel="StyleSheet" href="/static/styles/style.css" type="text/css">
-
+	<script type="text/javascript" src="/static/js/functions.js"></script>
+    
     <script>
         var g_objeto;
 
@@ -72,8 +73,21 @@
         function js_log_lotes() {
             id_view_log.style.display = id_view_log.style.display == 'block' ? 'hidden' : 'block';
             
-			ajax("/info", { "name":"log_lotes", "job_name": P_NEWJOB_NAME.value }, function(a) {
-                id_view_log_lotes.innerHTML = a.message;
+			ajax("/info", { "name":"result_set", "sql": "job_logger_lotes", "sql_pars": [ P_NEWJOB_NAME.value ]   }, function(a) {
+				id_view_log_lotes.innerHTML = "";
+				id_view_log_lotes.appendChild(to_table(a.data, a.fields));
+				id_view_log_lotes.querySelectorAll("tr").forEach((e, idx) => {
+					if (idx > 0) {
+                        var c_value = e.cells[0].innerHTML;
+                        var x = `<a href=/logger?batch_id=${ c_value }&job_name=${ P_NEWJOB_NAME.value  } target=logger_${ c_value }> ${ c_value }  </a>`;
+						e.cells[0].innerHTML  = x;
+
+						if (e.cells[3].innerHTML == "F") e.cells[3].innerHTML = ICO_OK;
+						if (e.cells[3].innerHTML == "A") e.cells[3].innerHTML = ICO_ERROR;
+						if (e.cells[3].innerHTML == "E") e.cells[3].innerHTML = ICO_RUNNING;
+						if (e.cells[3].innerHTML == "K") e.cells[3].innerHTML = ICO_WARNING;                        
+					}
+				});                
 			}, null);
         }
 
