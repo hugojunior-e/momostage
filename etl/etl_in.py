@@ -4,9 +4,20 @@ import boto3
 import json
 import os
 import re
+import sys
 import ibm_db
 import xml.etree.ElementTree as ET
 from unicodedata import normalize
+
+#from openpyxl import load_workbook
+
+import requests
+import pandas as pd
+from io import BytesIO
+from msal import ConfidentialClientApplication
+import base64
+
+
 
 class ETL_IN:
   def __init__(self, config, logger_id, m_resto=0, m_qtd=1):
@@ -17,7 +28,13 @@ class ETL_IN:
     self.fp          = None
     self.logger_id   = logger_id
     self.py_code     = None
-    self.py_code_ret = {"consoleLog": self.consoleLog}
+    self.py_code_ret = {"consoleLog": self.consoleLog, "C_NEWLINE":"\n", "C_TAB":"\t"}
+
+    if self.config['C_TYPE'] == "sharepoint":
+      self.sharepoint_url   = self.config['C_SHAREPOINT_URL']
+      self.sharepoint_aba   = self.config['C_SHAREPOINT_ABA']
+      self.sharepoint_auth  = json.loads( etl_utils.get_param_value("AUTHS.SHAREPOINT", self.config['C_SHAREPOINT_AUTH'] ) )
+      self.sharepoint_flush = False
 
     if self.config['C_TYPE'] == "filename":
       self.filename_file_required = self.config['C_FILENAME_FILE_REQUIRED'] == "1"
@@ -37,13 +54,19 @@ class ETL_IN:
         self.qtd_inst = int( match.group(1) ) if match else etl_utils.CONSTANT_QTD_THREADS
       else:
           self.qtd_inst = 1  
+      
+      if "job_execute" not in f"{sys.argv}" and self.qtd_inst > etl_utils.CONSTANT_QTD_THREADS:
+        etl_utils.log(self.logger_id, f"*** WARNING: SQL with #MOD# but no job_execute in the command line. Defaulting to {etl_utils.CONSTANT_QTD_THREADS} instance. ***")
+        self.qtd_inst = etl_utils.CONSTANT_QTD_THREADS
 
-      arsize             = self.config.get('C_SQL_ARRAYSIZE')
-      self.sql_arraysize = int( arsize ) if arsize != None else 5000
+      record_count          = self.config.get('C_SQL_RECORD_COUNT')
+      array_size            = self.config.get('C_SQL_ARRAY_SIZE')
+      self.sql_record_count = int( record_count ) if record_count != None else 5000
+      self.sql_array_size   = int( array_size ) if array_size != None else 5000
 
       AUX = self.config['C_SQL_DB'] 
 
-      etl_utils.log(self.logger_id,  f"DB: { AUX } : Opening : {self.sql_arraysize}")
+      etl_utils.log(self.logger_id,  f"DB: { AUX } : Opening : as={self.sql_array_size} rc={self.sql_record_count}")
       self.db      = etl_utils.connect_db( AUX )
       self.db_type = str(type(self.db)).lower().replace("<class '","").replace("'>","")
       etl_utils.log(self.logger_id,  f"DB: { AUX } : success : { self.db_type }")
@@ -70,12 +93,70 @@ class ETL_IN:
   def consoleLog(self, msg):
     etl_utils.log(self.logger_id, msg)    
 
+
   #=======================================================================================================
   #
   #=======================================================================================================
 
+
+  def getDataSharePoint(self):
+      # CONFIG
+      tenant_id     = self.sharepoint_auth.get('tenant_id') 
+      client_id     = self.sharepoint_auth.get('client_id') 
+      client_secret = self.sharepoint_auth.get('client_secret') 
+      share_url     = self.sharepoint_url
+
+      # AUTH
+      authority = f"https://login.microsoftonline.com/{tenant_id}"
+
+      app = ConfidentialClientApplication(
+          client_id,
+          authority=authority,
+          client_credential=client_secret
+      )
+
+      token        = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+      access_token = token["access_token"]
+      headers      = {
+          "Authorization": f"Bearer {access_token}"
+      }
+
+      encoded_url = base64.urlsafe_b64encode(share_url.encode()).decode().rstrip("=")
+      file_url    = f"https://graph.microsoft.com/v1.0/shares/u!{encoded_url}/driveItem/content"
+      resp        = requests.get(file_url, headers=headers)
+
+      if resp.status_code != 200:
+          raise Exception( f"Error on download File: status_code={ resp.status_code } text={ resp.text }" )
+
+      df = pd.read_excel(BytesIO(resp.content), engine="openpyxl", sheet_name=self.sharepoint_aba)
+      return df.values.tolist()
+      #wb    = load_workbook(BytesIO(resp.content), data_only=True)
+      #ws    = wb[self.sharepoint_aba]
+      #dados = [
+      #  list(row) 
+      #  for row in ws.iter_rows(values_only=True)
+      #  if any(cell is not None for cell in row)
+      #]
+      #return dados
+
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
+
   def getData(self):
 
+    # ----------------------------------------
+    # executa entrada para sharepoint
+    # ----------------------------------------
+    
+    if self.config['C_TYPE'] == "sharepoint":
+      if self.sharepoint_flush == False:
+        self.sharepoint_flush = True
+        return self.getDataSharePoint()
+      else:
+        return []
+    
     # ----------------------------------------
     # executa entrada para xml
     # ----------------------------------------
@@ -125,8 +206,8 @@ class ETL_IN:
     if self.config['C_TYPE'] == "sql":
       if self.sql_is_open == False:
         if "ibm" not in self.db_type:
-          self.cur.arraysize    = 20000
-          self.cur.prefetchrows = 20000
+          self.cur.arraysize    = self.sql_array_size
+          self.cur.prefetchrows = self.sql_array_size
           etl_utils.log(self.logger_id,  f"DB Executing...")
           self.cur.execute(self.sql_query)
           etl_utils.log(self.logger_id,  f"DB Open Success...")
@@ -136,9 +217,9 @@ class ETL_IN:
         self.sql_is_open = True
 
       if "ibm" not in self.db_type:
-        return self.cur.fetchmany( self.sql_arraysize )
+        return self.cur.fetchmany( self.sql_record_count )
       else:
-        x = ibm_db.fetchmany(self.sql_stmt_db2, self.sql_arraysize)
+        x = ibm_db.fetchmany(self.sql_stmt_db2, self.sql_record_count)
         return [] if x == None else x
 
     # ----------------------------------------

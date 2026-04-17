@@ -1,15 +1,18 @@
 import oracledb
+import jaydebeapi
 import mysql.connector
+import psycopg2
+import snowflake.connector
+import redshift_connector
+import ibm_db
+
 import json
 import time
 import uuid
 import os
 import requests
-import snowflake.connector
-import redshift_connector
-import ibm_db
-import multiprocessing
-import functools
+import subprocess
+
 from datetime import datetime
 
 oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_12")
@@ -31,24 +34,22 @@ def local_db():
 
 CONSTANT_GLOBALS_parameters = {}
 
-CONSTANT_OWNER = "DWADM"
-
-CONSTANT_SQL_JOB_BATCH_PARAMETERS = f"""
+CONSTANT_SQL_JOB_BATCH_PARAMETERS = """
     select nvl(parameters,'-')
-      from {CONSTANT_OWNER}.ms_job_batch
+      from dwadm.ms_job_batch
      where id = '%s'
        and job_name = '%s'
 """
 
-CONSTANT_SQL_JOB_BATCH_STATUS_UPDATE = f"""
+CONSTANT_SQL_JOB_BATCH_STATUS_UPDATE = """
   declare
     v_id         number        := '<id>';
     v_status     varchar2(100) := '<status>';
     v_job_name   varchar2(100) := '<job_name>';
     v_created_by varchar2(100);
   begin
-    update {CONSTANT_OWNER}.ms_job_batch
-       set status = v_status,
+    update dwadm.ms_job_batch
+       set status = case when v_status = 'W' then 'E' else v_status end,
            started_at  = case when v_status = 'E'        then sysdate else started_at  end,
            finished_at = case when v_status in ('F','A') then sysdate else finished_at end         
      where id = v_id
@@ -57,16 +58,16 @@ CONSTANT_SQL_JOB_BATCH_STATUS_UPDATE = f"""
 
     if ( v_created_by = 'ALGARSCHEDULER' and v_status = 'A' ) then
 
-      update {CONSTANT_OWNER}.ms_job_batch
+      update dwadm.ms_job_batch
          set status = 'AC'
        where rowid in (  
                        select b1.rowid
-                         from {CONSTANT_OWNER}.ms_job_batch b1, 
-                              {CONSTANT_OWNER}.ms_job_sequence s1,
+                         from dwadm.ms_job_batch b1, 
+                              dwadm.ms_job_sequence s1,
                               (
                                     select order_pri, order_sec
-                                      from {CONSTANT_OWNER}.ms_job_batch b, 
-                                           {CONSTANT_OWNER}.ms_job_sequence s
+                                      from dwadm.ms_job_batch b, 
+                                           dwadm.ms_job_sequence s
                                      where b.id = v_id
                                        and b.job_name = v_job_name
                                        and s.SEQ_NAME = b.MANAGED_BY       
@@ -84,15 +85,15 @@ CONSTANT_SQL_JOB_BATCH_STATUS_UPDATE = f"""
   end;     
 """
 
-CONSTANT_SQL_JOB_BATCH_CREATE = f"""
+CONSTANT_SQL_JOB_BATCH_CREATE = """
 declare
   v_id number;
 begin
-  SELECT {CONSTANT_OWNER}.ms_job_batch_seq.nextval
+  SELECT dwadm.ms_job_batch_seq.nextval
     INTO v_id
     FROM dual;
   
-  insert into {CONSTANT_OWNER}.ms_job_batch(id, job_name, created_at, created_by, managed_by, parameters, status)
+  insert into dwadm.ms_job_batch(id, job_name, created_at, created_by, managed_by, parameters, status)
   values (
     v_id,
     '%s',
@@ -118,22 +119,22 @@ def C_TRANS(records, lookups):
   return C_OUTPUT
 """
 
-CONSTANT_SQL_JOB = f"""
+CONSTANT_SQL_JOB = """
 SELECT origin,
        target,
        hasheds,
        jsh
-  FROM {CONSTANT_OWNER}.ms_job_def 
+  FROM dwadm.ms_job_def 
  where job_name = '%s'
    and reg_sts = 1
 """
 
 
-CONSTANT_SQL_JOB_TRANSF = f"""
+CONSTANT_SQL_JOB_TRANSF = """
 SELECT transf,
        filter,
        lookups
-  FROM {CONSTANT_OWNER}.ms_job_transf 
+  FROM dwadm.ms_job_transf 
  where job_name = '%s'
    and reg_sts = 1
  order by job_order
@@ -142,7 +143,7 @@ SELECT transf,
 CONSTANT_QTD_THREADS = 5
 CONSTANT_TIMEOUT_THREAD = 300  # segundos
 
-AS_GERA_LOTE = f"""
+AS_GERA_LOTE = """
 DECLARE
   v_id        NUMBER;
   v_pars      VARCHAR2(2000);
@@ -150,11 +151,11 @@ DECLARE
   v_key_name  VARCHAR2(200);
   v_comma     NUMBER;
 BEGIN
-  SELECT {CONSTANT_OWNER}.ms_job_batch_seq.nextval
+  SELECT dwadm.ms_job_batch_seq.nextval
     INTO v_id
     FROM dual;
 
-  INSERT INTO {CONSTANT_OWNER}.ms_job_batch (
+  INSERT INTO dwadm.ms_job_batch (
     id,
     job_name,
     created_at,
@@ -170,16 +171,16 @@ BEGIN
            seq_name,
            NULL,
            'P'
-      FROM {CONSTANT_OWNER}.ms_job_sequence s
+      FROM dwadm.ms_job_sequence s
      WHERE s.SEQ_NAME = '$AGRUPAMENTO$'
        AND fl_active = 1;
 
   FOR cx IN ( SELECT s.PARAMETERS,
                      b.rowid,
                      def.PARAMETERS keys
-               FROM {CONSTANT_OWNER}.ms_job_batch b,
-                    {CONSTANT_OWNER}.ms_job_sequence s,
-                    {CONSTANT_OWNER}.ms_job_def def
+               FROM dwadm.ms_job_batch b,
+                    dwadm.ms_job_sequence s,
+                    dwadm.ms_job_def def
               WHERE b.id = v_id
                 AND s.seq_name   = b.MANAGED_BY
                 AND s.job_name   = b.JOB_NAME
@@ -214,7 +215,7 @@ BEGIN
     END LOOP;
 
     v_pars  := v_pars || chr(125);
-    UPDATE {CONSTANT_OWNER}.ms_job_batch
+    UPDATE dwadm.ms_job_batch
        SET PARAMETERS = v_pars
      WHERE ROWID = cx.rowid;
   END LOOP;
@@ -225,15 +226,15 @@ END;
 """
 
 
-AS_VERIFICA_LOTE = f"""
+AS_VERIFICA_LOTE = """
 select decode(count(1), 0, 'Finaliza', 'Aguarda') as retorno
-  from {CONSTANT_OWNER}.ms_job_batch a
+  from dwadm.ms_job_batch a
  where a.id = $p_lote$
    and a.status in ('P')
 """
 
 
-AS_JOBS_AGENDA = f"""
+AS_JOBS_AGENDA = """
 select job_name, R_ID from
 (
     select job_name, 
@@ -245,15 +246,15 @@ select job_name, R_ID from
                    b.rowid r_id,
                    seq_name, order_pri, order_sec,
                   row_number() over(partition by id, s.seq_name, order_pri order by id, s.seq_name, order_pri, order_sec) executar
-              from {CONSTANT_OWNER}.ms_job_batch b, 
-                   {CONSTANT_OWNER}.ms_job_sequence s
+              from dwadm.ms_job_batch b, 
+                   dwadm.ms_job_sequence s
              where id = $p_lote$
                and s.seq_name = b.MANAGED_BY
                and s.job_name = b.JOB_NAME
                and b.STATUS = 'P'
                and not exists ( select 1
-                                  from {CONSTANT_OWNER}.ms_job_batch     r2,
-                                       {CONSTANT_OWNER}.ms_job_sequence  j2
+                                  from dwadm.ms_job_batch     r2,
+                                       dwadm.ms_job_sequence  j2
                                   where r2.job_name(+) = j2.job_name
                                     and r2.id = b.id
                                     and j2.order_pri = s.order_pri
@@ -262,33 +263,17 @@ select job_name, R_ID from
            ) vw where executar = 1        
 ) vw2
   where linha <= (
-                    (select  to_number( nvl( max(param_value) , '20' ) )
-                       from {CONSTANT_OWNER}.ms_job_globals
+                    (select to_number( nvl( max(param_value) , '20' ) )
+                       from dwadm.ms_job_globals
                       where group_name = 'PARAMETERS'
                         AND param_name = 'QTD_INST_AS') 
                     - 
                     (select count(1)
-                       from {CONSTANT_OWNER}.ms_job_batch rr
+                       from dwadm.ms_job_batch rr
                       where rr.id = vw2.id
-                        and rr.status = 'E')
+                        and rr.status = 'E'  )
                  )
 """
-
-AS_VERIFICA_PENDENTES = f"""
-  select count(1) from {CONSTANT_OWNER}.ms_job_batch where id = $p_lote_id$ and status not in ('K', 'F')
-"""
-
-
-
-def asVerificaPendentes( p_lote ):
-  db  = local_db()
-  cur = db.cursor()
-  cur.execute( AS_VERIFICA_PENDENTES.replace("$p_lote_id$",str(p_lote)))
-  ret = cur.fetchone()[0]
-  cur.close()
-  db.close()
-  return ret
-
 
 def asExecutaViewJobsAgenda( p_lote ):
   db    = local_db()
@@ -335,7 +320,7 @@ def load_globals():
   global CONSTANT_GLOBALS_parameters
   db  = local_db()
   cur = db.cursor()
-  cur.execute( f"SELECT group_name, param_name, param_value FROM {CONSTANT_OWNER}.ms_job_globals" )
+  cur.execute( "SELECT group_name, param_name, param_value FROM dwadm.ms_job_globals" )
   dados = cur.fetchall()
 
   conf = {}
@@ -357,9 +342,13 @@ def _do_connect_(dbname,timeout=10):
   dados   = json.loads(get_param_value("DATABASES", dbname.upper()))
   con     = None
 
-  if "oracle" in dados['dbtype']:
+  if dados['dbtype'] == "oracle":
     dsn            = f"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST={dados['host']})(PORT={dados['port']})(CONNECT_TIMEOUT={timeout}))(CONNECT_DATA=(SERVICE_NAME={dados['database']})))"
     con            = oracledb.connect(user=dados['usr'], password=dados['pwd'], dsn=dsn, tcp_connect_timeout=timeout)
+
+  if dados['dbtype'] == "oracle8":
+    dsn = f"{dados['host']}:{dados['port']}/{dados['database']}"
+    con = jaydebeapi.connect("oracle.jdbc.driver.OracleDriver",f"jdbc:oracle:thin:@{ dsn }",[ dados['usr'], dados['pwd'] ],"/home/producao/libsjava/oracle-jdbc.jar")
 
   if "mysql" in dados['dbtype']:
     con = mysql.connector.connect(
@@ -368,13 +357,23 @@ def _do_connect_(dbname,timeout=10):
        user=dados['usr'],
        password=dados['pwd'],
        database=dados['database'],
-       connection_timeout=timeout)
+       connection_timeout=timeout,
+       charset="utf8")
 
   if "redshift" in dados['dbtype']:
     con = redshift_connector.connect( host=dados['host'],database=dados['database'],port=5439,user=dados['usr'],password=dados['pwd'],  timeout=60)
   
   if "db2" in dados['dbtype']:
     con = ibm_db.connect( f"DATABASE={ dados['database'] };HOSTNAME={ dados['host'] };PORT={ dados['port'] };PROTOCOL=TCPIP;UID={ dados['usr'] };PWD={ dados['pwd'] };CONNECTTIMEOUT={timeout}", "", "")
+
+  if "postgresql" in dados['dbtype']:
+    con = psycopg2.connect(
+            host=dados['host'],
+            database=dados['database'],
+            user=dados['usr'],
+            password=dados['pwd'],
+            port=dados['port']
+        )
 
   if "snowflake" in dados['dbtype']:
     private_key_path = "/app_etl/rsa_key_algaretl.der"
@@ -555,11 +554,119 @@ def human_readable_size(size_bytes):
     return f"{size_bytes:.2f} {units[i]}"
 
 
+#=======================================================================================================
+# mata os processos
+#=======================================================================================================
+
 def kill_pids(list_pids, logger_id = None, reason = "-"):
   for x in list_pids:
     try:
-      os.kill(x.pid, 9)
       if logger_id:
-         log(logger_id, f"Killed PID { x.pid } by reason { reason }" )
-    except Exception as e:
+         log(logger_id, f"kill PID { x.pid } by reason { reason }" )
+      os.kill(x.pid, 9)
+    except:
       pass
+    
+    try:
+       x.join(timeout=2)
+    except:
+       pass
+
+
+#=======================================================================================================
+# 
+#=======================================================================================================
+
+
+def get_server_info():
+  result = subprocess.run(['free', '-h'], capture_output=True, text=True)
+  lines  = result.stdout.splitlines()
+
+  mem_data     = []
+  swap_data    = []
+  app_data     = []
+  load_average = []
+  process_run  = []
+
+  ## memory information
+
+  for line in lines:
+    if line.startswith('Mem:'):
+      parts = line.split()
+      mem_data = [parts[1], parts[2], parts[3], ""]
+
+    elif line.startswith('Swap:'):
+      parts = line.split()
+      swap_data = [parts[1], parts[2], parts[3], ""]
+
+  ## disk information
+
+  result = subprocess.run(['df', '-h', '/app'], capture_output=True, text=True)
+  lines  = result.stdout.splitlines()
+  
+  if len(lines) >= 2:
+    parts = lines[1].split()
+    app_data = [parts[1], parts[2], parts[3], parts[4]]
+
+  ## load average
+  result        = subprocess.run(['cat', '/proc/loadavg'], capture_output=True, text=True)
+  load_average  = [ float(x) for x in result.stdout.strip().split()[0:3] ]
+
+  ## cpu %
+  result = subprocess.run("top -bn1 | awk '/Cpu/ {print 100 - $8}'",shell=True,capture_output=True,text=True)
+  cpu_usage = float(result.stdout.strip().replace(',', '.'))
+
+  ## cpu qtd
+  result  = subprocess.run("nproc",shell=True,capture_output=True,text=True)
+  cpu_count = float(result.stdout.strip())
+
+  ## process running
+  returned = subprocess.run("ps -eo pid,ppid,lstart,%cpu,%mem,cmd --sort=-%cpu | grep -E 'job_execute|ALGAR_PRD_ExecGen.py' | grep -v grep", shell=True, capture_output=True, text=True)
+  process_info = returned.stdout.strip()
+  process_info = process_info.replace("/home/producao/Python/Python3.13/bin/python3 /home/producao/DW/py/ALGAR_PRD_ExecGen.py -P ","")
+  process_info = process_info.replace("/usr/bin/python3 /app_etl/etl/job_execute.py ","")
+  proc_list    = []
+  for x in process_info.splitlines():
+    i = x.strip().split(maxsplit=9)
+    if i[9] not in proc_list:
+      proc_list.append(i[9])
+      process_run.append( [ i[0], i[1], f"{i[4]}/{i[3]}/{i[6]} {i[5]}", i[8], i[7], i[9], "" ] )
+
+  return { 
+     "mem_data"     : mem_data, 
+     "swap_data"    : swap_data, 
+     "app_data"     : app_data, 
+     "load_average" : load_average, 
+     "cpu_usage"    : cpu_usage,
+     "cpu_count"    : cpu_count,
+     "process_run"  : process_run
+  }
+
+
+
+
+def wait_cpu_percent():
+  try:
+    cpu_limit_percent = int( get_param_value('PARAMETERS','CPU_LIMIT_PERCENT') )
+
+    if cpu_limit_percent == -1:
+       return "no limit"
+
+    while True:
+      avg_core       = get_server_info().get("cpu_usage",70)
+      if avg_core < cpu_limit_percent:
+         break
+      time.sleep(10)
+
+    return "OK"
+  except Exception as e:
+     return f"Error {e}"
+  
+
+
+#=======================================================================================================
+# 
+#=======================================================================================================
+
+def compress(filename):
+  subprocess.run(["gzip","-1", filename], check=True )

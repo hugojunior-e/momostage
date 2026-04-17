@@ -15,7 +15,7 @@ body {
 .menu {
   background-color: #333;
   color: white;
-  padding: 10px;
+  padding: 5px;
   display: flex;
   justify-content: flex-start;
   align-items: center;
@@ -78,9 +78,6 @@ body {
 }
 
 button {
-  font-size: 16px;
-  padding: 10px 20px;
-  cursor: pointer;
   background-color: #444;
   color: white;
   border: none;

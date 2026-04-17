@@ -1,12 +1,10 @@
 import csv
-import gzip
 import etl_utils
 import os
 import sqlite3
 import json
 import boto3
 import sys
-import subprocess
 
 import snowflake.connector
 import pandas as pd
@@ -24,27 +22,31 @@ class ETL_OUT:
     self.logger_id           = logger_id
     self.temp_file_operation = etl_utils.get_param_value('PARAMETERS','TEMP_FILE_OPERATION')
 
-    #-----------
+    #------------------------------------------------------------------------------------------
+
     if self.value('C_TYPE') == 'sql':
-      self.sql_sf_cfgs   = False
       self.sql_db        = self.value('C_SQL_DB')
       self.sql           = self.value('C_SQL')
+      self.sql_orig      = self.sql
       self.sql_after     = self.value('C_SQL_AFTER')
       self.sql_before    = self.value('C_SQL_BEFORE')
+      self.sql_auto      = self.value('C_SQL_AUTO')
+      self.sql_fields    = self.value('C_SQL_FIELDS').split("\n") if self.value('C_SQL_FIELDS') is not None else []
+      self.sql_type      = self.value('C_SQL_TYPE')
 
+      if self.sql_db == "SNOWFLAKE":
+        self.sql_sf_colunas  = self.sql_fields
+        self.sql_sf_conf     = self.sql_orig.split(".")
 
-    #-----------
+      self.sqlPrepareStatement()
+    #------------------------------------------------------------------------------------------
 
     if self.value('C_TYPE') == 'filename':
       self.filename        = self.value("C_FILENAME")      
       self.filename_fd     = self.value('C_FILENAME_FD')
       self.filename_fields = self.value("C_FILENAME_FIELDS").split("\n")
-      snowconf = self.sql.split(".")
 
-      etl_utils.log(self.logger_id, f"snowconf = {snowconf}")
-
-
-    #-----------
+    #------------------------------------------------------------------------------------------
 
     if self.value('C_TYPE') == 'boto3':
       self.boto3_format      = self.value('C_BOTO3_FORMAT')
@@ -54,11 +56,10 @@ class ETL_OUT:
       self.boto3_fd          = self.value('C_BOTO3_FD')
       self.boto3_file_list   = []
       self.boto3_bucket_data = json.loads( etl_utils.get_param_value("AUTHS.S3", self.value('C_BOTO3_BUCKET')) )
-      self.boto3_MAX_SIZE_MB = 250 if self.boto3_format == "txt_gzip" else 800
+      self.boto3_MAX_SIZE_MB = 800
+      self.boto3_clean_str   = False
 
-      
-
-    #-----------
+    #------------------------------------------------------------------------------------------
 
     if self.value('C_TYPE') == 'dataset':
       self.dataset           = self.value("C_DATASET")
@@ -78,6 +79,52 @@ class ETL_OUT:
   def value(self, key):
     return self.config[ key.replace("C_", f"C{self.idx + 1}_") ]
 
+
+
+  #=======================================================================================================
+  #
+  #=======================================================================================================
+
+  def sqlPrepareStatement(self):
+    if self.sql_auto == "1":
+      l_fields   = self.sql_fields
+      tabela     = self.sql
+      campos     = [ f.replace("*", "") for f in l_fields ]
+      binds      = [ f":{xx+1}" for xx in range(len(campos))]
+      campos_cur = [ f":{ xx + 1 } as {fn}" for xx,fn in enumerate(campos)  ]
+      campos_key = ""
+
+      if self.sql_db == "SNOWFLAKE":
+        binds      = [ "%s" for _ in range(len(campos))]
+
+      for ff in l_fields:
+        if "*" in ff:
+          campos_key = campos_key + " AND " + ff.replace("*", "") + " = cx." + ff.replace("*", "")
+
+      if self.sql_type == "Insert":
+        self.sql = f"""INSERT INTO {tabela}({ ",".join(campos) }) values ({ ",".join(binds) })"""
+
+      etl_utils.log(self.logger_id, self.sql)
+
+      if self.sql_type == "Update Then Insert":
+        self.sql = f"""
+        BEGIN
+          FOR CX IN ( SELECT { ','.join(campos_cur) }
+                        FROM DUAL )
+          loop
+            update {tabela}  set
+              { ','.join([ xx + " = cx." + xx for xx in campos]) }
+            where 1=1
+              {campos_key};
+
+            if (SQL%ROWCOUNT = 0) then
+              insert into {tabela} ( { ','.join(campos) } )
+              values ( { ','.join([ "cx." + xx for xx in campos]) } );
+            end if;
+          end loop;
+        END;
+        """
+    pass
 
   #=======================================================================================================
   #
@@ -103,10 +150,8 @@ class ETL_OUT:
       if tamanho > self.boto3_MAX_SIZE_MB:
         if self.fp:
           self.fp.close()
-
-          if self.boto3_format == "txt_gzip2":
-            subprocess.run(["gzip", "-1", self.boto3_file_local], check=True )
-            self.boto3_file_list[ self.boto3_file_list.index(self.boto3_file_local) ] = self.boto3_file_local + ".gz"
+          etl_utils.compress(self.boto3_file_local)
+          self.boto3_file_list[ self.boto3_file_list.index(self.boto3_file_local) ] = self.boto3_file_local + ".gz"
 
         self.boto3_exists     = False
         self.fp               = None
@@ -124,6 +169,10 @@ class ETL_OUT:
 
         for file_orig in self.boto3_file_list:
           if os.path.exists(file_orig):
+            if not file_orig.endswith(".gz") and "gzip" in self.boto3_format:
+              etl_utils.compress(file_orig)
+              file_orig = file_orig + ".gz"
+
             prefix         = self.boto3_filename.split("/")
             prefix[-1]     = file_orig.split( os.path.sep )[-1]
             file_remote    = "/".join( prefix )
@@ -154,17 +203,8 @@ class ETL_OUT:
         self.cur = self.db.cursor()
         
       if self.sql_db == "SNOWFLAKE":
-        if self.sql_sf_cfgs == False:
-          self._db_colunas  = self.value('C_SQL_FIELDS').split("\n")
-          self._db_snowconf = self.value('C_SQL_ORIG').split(".")
-          self.sql_sf_cfgs  = True
-
-        df = pd.DataFrame(data, columns=self._db_colunas)
-        date_cols = [
-            "TRANS_DATE",
-            "TRANSACTION_DATE",
-            "F_TIMESTAMP"
-        ]
+        df        = pd.DataFrame(data, columns=self.sql_sf_colunas)
+        date_cols = []
 
         for col in date_cols:
             if col in df.columns:
@@ -174,9 +214,9 @@ class ETL_OUT:
         success, nchunks, nrows, _ = write_pandas(
             self.db,
             df,
-            table_name=self._db_snowconf[2],
-            schema=self._db_snowconf[1],
-            database=self._db_snowconf[0],
+            table_name=self.sql_sf_conf[2],
+            schema=self.sql_sf_conf[1],
+            database=self.sql_sf_conf[0],
             chunk_size=50000,
             parallel=8
         )
@@ -192,16 +232,15 @@ class ETL_OUT:
     if self.value('C_TYPE') == 'boto3':
       if self.fp == None:
         self.boto3_file_local  = self.boto3NewFileName()
-
-        if self.boto3_format == "txt_gzip":
-          self.fp     = gzip.open(self.boto3_file_local,"wt", newline="", encoding='utf-8', compresslevel=1)
-        else:
-          self.fp     = open(self.boto3_file_local,"w", newline="", encoding='utf-8')
-
-        self.myFile = csv.writer(self.fp, lineterminator = '\n', delimiter=self.boto3_fd  , quoting=csv.QUOTE_ALL)
+        self.fp                = open(self.boto3_file_local,"w", newline="", encoding='utf-8')
+        self.myFile            = csv.writer(self.fp, lineterminator = '\n', delimiter=self.boto3_fd  , quoting=csv.QUOTE_ALL)
         self.myFile.writerow( self.boto3_fields )
 
-      self.myFile.writerows( etl_utils.clean_and_convert_tuples(data) )
+      if self.boto3_clean_str:
+        self.myFile.writerows( etl_utils.clean_and_convert_tuples(data) )
+      else:
+        self.myFile.writerows( data )
+
       self.boto3CheckFileSize()
 
 
@@ -263,14 +302,6 @@ class ETL_OUT:
       dbt   = etl_utils.connect_db( self.sql_db )
       dbt_c = dbt.cursor()
       dbt_c.execute(  self.sql_after   )     
-
-    if self.value('C_TYPE') == 'boto3':
-      l_arqs_s3 = [
-        f
-        for f in os.listdir( etl_utils.get_tmp_dir() )
-        if f"_S3_{ self.logger_id['batch_id'] }_" in f
-      ]
-      #etl_utils.log(self.logger_id, f"Files To Send: {l_arqs_s3}")
 
 
   #=======================================================================================================

@@ -32,6 +32,7 @@
                 fill_combo(C_BOTO3_BUCKET   , forms.cbo_boto3);
                 fill_combo(P_NEWJOB_PROJECT , forms.cbo_projetos);
                 fill_combo(C_ODATA_AUTH     , forms.cbo_auths_sap);
+                fill_combo(C_SHAREPOINT_AUTH, forms.cbo_sharepoint)
             }, null);
         }
 
@@ -39,18 +40,6 @@
         //#####################################################################################################
         //
         //#####################################################################################################
-
-        function js_test_connection() {
-            if ( C_SQL_DB.value == "" ) {
-                alert("Select Database first.");
-                return;
-            }
-
-            ajax("/info", { "name":"test_connection", "db_name": C_SQL_DB.value }, function(a) {
-                alert(a.message);
-            }, null);
-        }
-
 
         function js_get_fields() {
             if ( C_SQL_DB.value == "" ) {
@@ -362,6 +351,10 @@
                 <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_transf.png type_obj="transf">
                     <br>Transformer <menu3></menu3>
                 </div>
+                <hr>
+                <div class="dropdown"><input class="dropbtn" type=image src=/static/img/icon_sharepoint.png type_obj="sharepoint">
+                    <br>SharePoint(desenv) <menu2></menu2>
+                </div>
             </center>
         </div>
     </div>
@@ -458,6 +451,21 @@
     </div>
 
 
+    <div id="id_sharepoint_edit" class="itools_modal">
+        <div class="itools_modal_content">
+        <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
+        <h2>Sharepoint Editor</h2>
+            <table >
+                <tr><td>Name</td><td> <input type="text" id="C_SHAREPOINT_NAME"></td> </tr>
+                <tr><td>URL</td><td> <input type="text" id="C_SHAREPOINT_URL" size="70"></td> </tr>
+                <tr><td>ABA</td><td> <input type="text" id="C_SHAREPOINT_ABA" size="70"></td> </tr>
+                <tr><td>Autentication</td><td><select id="C_SHAREPOINT_AUTH" ></select></td> </tr>
+                <tr><td colspan="2"><button value="Save" onclick="jsComponentSave()">Save</button></td> </tr>
+            </table>
+        </div>  
+    </div>  
+
+
     <div id="id_odata_edit" class="itools_modal">
         <div class="itools_modal_content">
         <span class="itools_modal_close" onclick="this.parentElement.parentElement.style.display='none'">&times;</span>
@@ -498,8 +506,7 @@
                     <td>
                         <select id="C_BOTO3_FORMAT">
                             <option value="txt">txt</option>
-                            <option value="txt_gzip">Gzip</option>
-                            <option value="txt_gzip2">Gzip2(testing)</option>
+                            <option value="txt_gzip">Gzip2(faster)</option>
                         </select>   
                     </td>
                 </tr>
@@ -546,7 +553,7 @@
                 <tr>
                     <td>Database</td>
                     <td> <select id="C_SQL_DB"></select></td>
-                    <td><a href=# onclick="js_test_connection()">(test)</a></td>
+                    <td></td>
                 </tr>
     
                 <tr>
@@ -568,16 +575,29 @@
                     <td></td>
                 </tr>
                 <tr>
-                    <td>ArraySize</td>
+                    <td>Record Count</td>
                     <td>
-                        <select id="C_SQL_ARRAYSIZE">
+                        <select id="C_SQL_RECORD_COUNT">
                             <option value="5000">Default(5000)</option>
                             <option value="20000">20000</option>
                             <option value="50000">50000</option>
                             <option value="100000">100000</option>
                         </select>
                     </td>
-                    <td></td>
+                    <td>Defines how many rows will be returned with each database fetch.</td>
+                </tr>
+
+                <tr>
+                    <td>Array Size</td>
+                    <td>
+                        <select id="C_SQL_ARRAY_SIZE">
+                            <option value="20000">20000</option>
+                            <option value="5000" selected>5000</option>
+                            <option value="1000">1000</option>
+                            <option value="500">500</option>
+                        </select>
+                    </td>
+                    <td>This defines how many rows the driver will retrieve from the database at a time in each fetch when you execute a SELECT statement.</td>
                 </tr>
     
                 <tr valign="top">

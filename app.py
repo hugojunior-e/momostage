@@ -4,9 +4,8 @@ import etl.etl_utils as eu
 import subprocess
 import os
 import glob
-import psutil
-import time
 import re
+import paramiko
 from ldap3 import Server, Connection, ALL, core
 from flask import Flask, render_template, redirect, request, session
 from markupsafe import Markup
@@ -25,8 +24,6 @@ Session(app)
 
 
 app.db              = eu.local_db()
-app.disk_io         = psutil.disk_io_counters()
-app.disk_io_now     = datetime.now()
 
 
 #######################################################################################
@@ -138,6 +135,38 @@ def create_component(local, config, addin="", index=""):
 #######################################################################################
 
 
+def importar_job_datastage():
+    host = "datastageprd01"
+    usuario = "producao"
+    senha = "Pr0duc@0s02010"
+    comando = f"""/opt/IBM/pastasletras/scripts/carga/lixo/migrar.py { request.form.get("job_name") }"""
+
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        # Conecta no servidor
+        client.connect(hostname=host, username=usuario, password=senha)
+
+        # Executa o comando
+        stdin, stdout, stderr = client.exec_command(comando)
+
+        # Captura saída
+        output = stdout.read().decode("utf-8")
+        error = stderr.read().decode("utf-8")
+
+        client.close()
+
+        # Se tiver erro, você pode tratar aqui
+        if error:
+            return f"ERRO:\n{error}"
+
+        return {"message": output}
+    except Exception as e:
+        return {"message": f"Falha na execucao: {str(e)}" }
+
+
+
 
 def metricas_log(log_texto: str):
     loop_value_ret = ""
@@ -247,34 +276,28 @@ def metricas_log(log_texto: str):
     return f"Time: {tempo_decorrido} ".ljust(20) + f"{qtd_text} {total_records:,} ".ljust(25) + f"Speed: {rec_por_seg}/seg ".ljust(20) + f"Files Count: {qtd_files}", loop_value_ret
 
 
+    
 
-def job_info_memory():
-    titulo   = ["", "total", "used", "free", "%"]
+def job_info_memory(info):
+    titulo      = ["", "total", "used", "free", "%"]
+    mem         = info.get("mem_data", [0,0,0])
+    swap        = info.get("swap_data", [0,0,0])
+    usage       = info.get("app_data", [0,0,0])
 
-    mem         = psutil.virtual_memory()
-    swap        = psutil.swap_memory()
-    usage       = psutil.disk_usage('/app')
-    io2         = psutil.disk_io_counters()
-    io2_now     = datetime.now()
-    io2_sec     = (io2_now - app.disk_io_now).total_seconds()
-    read_speed  = (io2.read_bytes - app.disk_io.read_bytes) / io2_sec
-    write_speed = (io2.write_bytes - app.disk_io.write_bytes) / io2_sec
-
-    a,b,c            = psutil.getloadavg()
-    d                = a/psutil.cpu_count()*100
-    app.disk_io      = io2
-    app.disk_io_now  = io2_now
+    a,b,c        = info.get("load_average", [0,0,0])
+    cpu_percent  = info.get("cpu_usage", 0)
+    cpu_count    = info.get("cpu_count", 1)
+    
 
     infos = [
-        ["Mem:", eu.human_readable_size(mem.total), eu.human_readable_size(mem.used), eu.human_readable_size(mem.free), f"{mem.percent:.2f}%" ],
-        ["Swap:", eu.human_readable_size(swap.total), eu.human_readable_size(swap.used), eu.human_readable_size(swap.free) , f"{swap.percent:.2f}%" ],
-        ["/app:", eu.human_readable_size(usage.total), eu.human_readable_size(usage.used), eu.human_readable_size(usage.free), f"{usage.percent:.2f}%"]
+        ["Mem:", mem[0], mem[1], mem[2], mem[3] ],
+        ["Swap:", swap[0], swap[1], swap[2], swap[3] ],
+        ["/app:", usage[0], usage[1], usage[2], usage[3] ]
     ]
 
     return {"data"  : infos, 
             "fields": titulo, 
-            "gauge1": f"<span>CPU%</span><h2>{ round(d,2) }</h2><span>{a:.2f},{b:.2f},{c:.2f}<br>{psutil.cpu_count()}</span>", 
-            "gauge2": f"<h2>IO</h2>R: {read_speed/1024/1024:.2f} MB/s<br>W: {write_speed/1024/1024:.2f} MB/s" 
+            "gauge1": f"<span>CPU%</span><h2>{ round(cpu_percent,2) }</h2><span>{a:.2f},{b:.2f},{c:.2f}<br>{cpu_count}</span>", 
     }
 
 
@@ -288,58 +311,27 @@ def job_info_last_abort():
 
 
 def job_info_kill_process():
-    pid = request.form.get("pid")
-    uid = request.form.get("user_id")
+    eu.load_globals()
+
+    users_permit = eu.get_param_value("PARAMETERS","KILL_PROCESS")
+    pid          = request.form.get("pid")
+    tipo_cmd     = request.form.get("tipo_cmd")
+    comando      = request.form.get("cmd")
+    userId       = session.get("status_login").upper()
+
     if pid != None and pid != "":
-        p   = psutil.Process( int(pid) )
-        cmd = " ".join(p.cmdline())
-        if "job_execute" in cmd:
+        if "local" in tipo_cmd:
             subprocess.run( f"ps -eo pid,ppid | awk '$1 == {pid} || $2 == {pid} {{ print $1 }}' | xargs -r kill -9", shell=True )
         else:
-            eu.load_globals()
-            users_permit = eu.get_param_value("PARAMETERS","KILL_PROCESS")
-            if uid.upper() in users_permit:
-                seq =  p.cmdline()[-1]
-                subprocess.run( f"pgrep -f { seq } | xargs kill -9", shell=True )
-                arquivos = glob.glob( f"/home/producao/DW/py/lock/*{ seq }*lock" )
+            if userId in users_permit:
+                subprocess.run( f"pgrep -f { comando } | xargs kill -9", shell=True )
+                arquivos = glob.glob( f"/home/producao/DW/py/lock/*{ comando }*lock" )
                 for arquivo in arquivos:
                     os.remove(arquivo)
             else:
                 return {"message" : "User not permited kill process"}            
         ret = f"Process {pid} killed."
     return {"message":ret}
-
-
-
-
-
-def job_info_process_running():
-    titulo   = ["pid", "ppid", "start", "%mem", "pcpu", "command", ""]
-    data     = []
-    lista_as = []
-
-    for proc in psutil.process_iter(['pid', 'ppid', 'name', 'username', 'cpu_percent', 'memory_percent']):
-        start_time = datetime.fromtimestamp(proc.create_time()).strftime("%d/%m/%Y %H:%M:%S")
-        proc_cmd   = proc.cmdline()
-        is_as      = (" ".join(proc.cmdline())).lower().__contains__("algar_prd_execgen")
-        is_mms     = (" ".join(proc.cmdline())).lower().__contains__("job_execute")
-        
-        pid            = proc.info['pid'] 
-        ppid           = proc.info['ppid']
-        cpu_percent    = proc.info['cpu_percent'] 
-        memory_percent = proc.info['memory_percent']
-
-        if is_mms or is_as:
-            mem      = ( f"{ memory_percent }" ).split(".")
-            mem_fmt  = mem[0] + "." + mem[1][0:2]
-            name_pc  = " ".join(proc_cmd[2 if is_mms else 3:])
-            if name_pc not in lista_as:
-                data.append( [pid, ppid, start_time, mem_fmt, cpu_percent, name_pc, ""] )
-            lista_as.append( name_pc )
-
-    return {"data":data, "fields": titulo}
-
-
 
 
 
@@ -387,7 +379,9 @@ def job_info_logger_batch_id():
     log_job  = request.form.get("job_name")
     log_file = f"{ eu.get_log_dir() }/{ log_id }.log"
     log_data = {}
-    ret      = ""
+    ret1     = ""
+    ret2     = ""
+    ret3     = ""
 
     if os.path.exists(log_file):
         with open(log_file, "r") as arq:
@@ -417,13 +411,19 @@ def job_info_logger_batch_id():
 
             if log_txt.strip().endswith("STATUS:ERRO"):
                 icone = "🔴" 
+                
             ret_header = f"""{icone} <a href=/designer?job_name={x} target=__blank>[edit]</a> - <a onclick=js_log_in_row('{xx_id}') style='cursor:pointer'>{ (x + log_lv).ljust(50) }</a> {log_metrica} <hr>"""
             ret_data   = f"<div id=id_log_{ xx_id } style='display:none'>{ log_txt }<hr></div>"
-            ret   = ret + ret_header + ret_data
+            if icone == "▶️":
+                ret1   = ret1 + ret_header + ret_data
+            if icone == "🔴":
+                ret2   = ret2 + ret_header + ret_data
+            if icone == "🟢":
+                ret3   = ret3 + ret_header + ret_data
     else:
         ret = "Logfile not found!"
         
-    return { "message": ret }
+    return { "message": ret1+ret2+ret3 }
 
 
 def job_info_logger_big():
@@ -463,11 +463,12 @@ def job_sequence_start():
 
 
 def job_info_check_abort():
-    batch_id = request.form.get("batch_id")
-    userId   = request.form.get("user_id")
     eu.load_globals()
+
+    batch_id     = request.form.get("batch_id")
+    userId       = session.get("status_login").upper()
     users_permit = eu.get_param_value("PARAMETERS","OPERATION_CHECK")
-    if userId.upper() in users_permit:
+    if userId in users_permit:
         sql      = db_sql("job_check_abort", [batch_id,userId])
         try:
             db_execute(sql,fetch=False)
@@ -515,12 +516,29 @@ def job_info_init_values():
     l_cbo_auths_sap     = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.SAP'  )).data]   )
     l_cbo_projetos      = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'FOLDER_ROOT')).data]   )
     l_cbo_boto3         = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.S3'   )).data]   )
+    l_cbo_sharepoint    = ",".join(  [x[0] for x in db_execute(sql.replace("<1>", 'AUTHS.SHAREPOINT'   )).data]   )
 
-    return {"cbo_databases" : l_cbo_databases,
-            "cbo_auths_sap" : l_cbo_auths_sap,
-            "cbo_projetos"  : l_cbo_projetos,
-            "cbo_boto3"     : l_cbo_boto3   }
+    return {"cbo_databases"  : l_cbo_databases,
+            "cbo_auths_sap"  : l_cbo_auths_sap,
+            "cbo_projetos"   : l_cbo_projetos,
+            "cbo_boto3"      : l_cbo_boto3,
+            "cbo_sharepoint" : l_cbo_sharepoint   }
+
+
+def job_info_delete_job():
+    eu.load_globals()
     
+    users_permit = eu.get_param_value("PARAMETERS","DELETE_JOB")
+    job_name     = request.form.get("job_name")
+    userId       = session.get("status_login").upper()
+
+    if userId in users_permit:
+        sql      = db_sql("job_delete", [job_name])
+        db_execute(sql, fetch=False)
+        return { "status_code": "0", "message": "Delete Successful" }
+    else:
+        return { "status_code": "1", "message": "User not permit to delete job!" }
+
 #######################################################################################
 #  
 #######################################################################################
@@ -536,6 +554,9 @@ def info():
     
     if name == "check_abort":
         return job_info_check_abort()
+    
+    if name == "delete_job":
+        return job_info_delete_job()
     
     if name == "job_sequence_save":
         return job_info_sequence_save()
@@ -566,9 +587,16 @@ def info():
     
     if name == "detect_fields":
         return job_info_detect_fields()
+    
+    if name == "importar_job_datastage":
+        return importar_job_datastage()
 
     if name == "dashboard_index":
-        return {"memory": job_info_memory(), "process_aborted": job_info_last_abort(), "process_running": job_info_process_running() }
+        info            = eu.get_server_info()
+        titulo          = ["pid", "ppid", "start", "%mem", "pcpu", "command", ""]
+        process_running = {"data": info.get("process_run", []), "fields": titulo}
+
+        return {"memory": job_info_memory(info), "process_aborted": job_info_last_abort(), "process_running": process_running }
 
 
 

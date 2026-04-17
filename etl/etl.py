@@ -7,6 +7,7 @@ import threading
 import os
 import json
 import sys
+import subprocess
 import traceback
 import time
 from datetime import datetime
@@ -21,15 +22,13 @@ class ETL:
     self.config_orig            = {}
     self.config_target          = {}
     self.loop_value             = loop_value
-    self.transfer_data_parallel = False
 
     if loop_value != None:
       etl_utils.log(self.logger_id,  f"######################################################################################################" )
       etl_utils.log(self.logger_id,  f"########## [{ os.environ.get('LOOP_VALUES') }]" )
       etl_utils.log(self.logger_id,  f"########## LOOP_VALUE={loop_value}" )
       etl_utils.log(self.logger_id,  f"######################################################################################################" )
-      
-    
+
 
 
   #=======================================================================================================
@@ -50,10 +49,11 @@ class ETL:
   #
   #=======================================================================================================
 
-  def process_last_time(self, l_timeout, index, finished=False):
+  def process_last_time(self, l_timeout, index):
     if l_timeout != None:
-      l_timeout[index] = { "dt":time.time(), "finished":finished }
+      l_timeout[index] = time.time()
 
+ 
   #=======================================================================================================
   #
   #=======================================================================================================
@@ -91,7 +91,6 @@ class ETL:
       self.process_last_time(l_timeout, m_resto)      
 
       qtd  = 0
-      l_saidas_threads = []
       while True:
         etapa = "Loading Data..."
         dados = inn.getData()
@@ -111,28 +110,15 @@ class ETL:
 
         etapa = "ProcessOUT..."
 
-        if self.transfer_data_parallel:
-          for louts in l_saidas_threads:
-            louts.join()
-          l_saidas_threads = [
-              threading.Thread(target=lambda s=saida: s.execute(x))
-              for saida in l_saidas
-          ]
-          for t in l_saidas_threads:
-              t.start()          
-        else:
-          for saida in l_saidas:
-            saida.execute(x)
+        for saida in l_saidas:
+          saida.execute(x)
 
-      for louts in l_saidas_threads:
-        louts.join()
-        
       etl_utils.log(self.logger_id,  f"FetchALL={qtd:,}"  )
-      self.process_last_time(l_timeout, m_resto,finished=True)
+      
+      self.process_last_time(l_timeout, m_resto)
 
       for saida in l_saidas:
         saida.finishing()
-
       
       return (0,"SUCESSO")
     except Exception as e:
@@ -179,16 +165,20 @@ class ETL:
       l_thread      = []
 
       for i in range(qtd_mod):
-        list_proc.append( {"dt":time.time(), "finished":False } )
+        list_proc.append( time.time() )
         t             = multiprocessing.Process(target=self.process_run, args=(i,qtd_mod,list_proc,) )
         t.index       = i
-        t.first_start = True
         l_thread.append(t)
         t.start()
         time.sleep(2)
 
       while len(l_thread) > 0:
-        for idx_x, x in enumerate(l_thread):
+        for x in l_thread[:]:
+          # Check timeout
+          if ( time.time() - list_proc[x.index] ) > etl_utils.CONSTANT_TIMEOUT_THREAD:
+            etl_utils.kill_pids( l_thread , logger_id = self.logger_id, reason="Timeout")
+            l_thread.clear()
+            raise Exception( f"Thread INDEX: { x.index } Status: TIMEOUT" )
 
           # Check finished
           if x.is_alive() == False:
@@ -201,31 +191,6 @@ class ETL:
               etl_utils.kill_pids( l_thread , logger_id = self.logger_id, reason="Abnormal Execution")
               l_thread.clear()
               raise Exception( msg )               
-            
-          # Check timeout
-          elif list_proc[x.index].get("finished") == False:
-            if ( time.time() - list_proc[x.index].get("dt") ) > etl_utils.CONSTANT_TIMEOUT_THREAD:
-              if x.first_start == True:
-                etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } First timeout reached. Extending time..." )
-
-                etl_utils.kill_pids( [ x ] , logger_id = self.logger_id, reason="First Timeout Reached")
-
-                tt                 = multiprocessing.Process(target=self.process_run, args=( x.index,qtd_mod,list_proc, ) )
-                tt.index           = x.index
-                tt.first_start     = False
-                tt.start()
-
-                l_thread[idx_x]  = tt
-                list_proc[idx_x] = { "dt":time.time(), "finished":False }
-
-              else:
-                etl_utils.log(self.logger_id,  f"Thread INDEX: { x.index } Timeout reached. Killing all threads..." )
-                etl_utils.kill_pids( l_thread , logger_id = self.logger_id, reason="Timeout")
-                l_thread.clear()
-                if list_proc[x.index].get("finished") == False:
-                  raise Exception( f"Thread INDEX: { x.index } Status: TIMEOUT" )
-
-            
         time.sleep(2)
         
     etl_utils.log(self.logger_id, "Executing OUT.after" )
@@ -250,10 +215,7 @@ class ETL:
       if p_param != "-":
         dados = json.loads(p_param)
         for l in dados:
-          if l.startswith("SYS_PARALLEL_TRANS_DATA"):
-            self.transfer_data_parallel = "1" in str(dados[l])
-          else:
-            ret  = ret.replace( f"#{ l }#", str(dados[l]) )
+          ret  = ret.replace( f"#{ l }#", str(dados[l]) )
     return ret
 
 
@@ -353,56 +315,11 @@ class ETL:
 
       etl_utils.log(self.logger_id, "Configuring Params input.")
       exec(c_origin, self.config_orig)
+
       etl_utils.log(self.logger_id, "Configuring Params output.")
       exec(c_target , self.config_target)
 
 
-      etl_utils.log(self.logger_id, "Configuring SQL Auto.")
-
-      for idx in range( self.config_target['C_OUT_COUNT'] ):
-        if self.config_target[ f'C{idx+1}_TYPE'] == 'sql' and self.config_target[ f'C{idx+1}_SQL_AUTO'] == "1":
-          l_fields   = self.config_target[ f'C{idx+1}_SQL_FIELDS'].split("\n")
-
-          tabela     = self.config_target[ f'C{idx+1}_SQL']
-          campos     = [ f.replace("*", "") for f in l_fields ]
-          binds      = [ f":{xx+1}" for xx in range(len(campos))]
-          campos_cur = [ f":{ xx + 1 } as {fn}" for xx,fn in enumerate(campos)  ]
-          campos_key = ""
-
-          if self.config_target['C1_SQL_DB'] == "SNOWFLAKE":
-            binds      = [ "%s" for xx in range(len(campos))]
-
-          for ff in l_fields:
-            if "*" in ff:
-              campos_key = campos_key + " AND " + ff.replace("*", "") + " = cx." + ff.replace("*", "")
-
-          self.config_target[ f'C{idx+1}_SQL_ORIG'] = self.config_target[ f'C{idx+1}_SQL']
-          
-
-          if self.config_target[ f'C{idx+1}_SQL_TYPE'] == "Insert":
-            self.config_target[ f'C{idx+1}_SQL'] = f"""INSERT INTO {tabela}({ ",".join(campos) }) values ({ ",".join(binds) })"""
-
-          etl_utils.log(self.logger_id, self.config_target[ f'C{idx+1}_SQL'] )
-
-          if self.config_target[ f'C{idx+1}_SQL_TYPE'] == "Update Then Insert":
-            self.config_target[ f'C{idx+1}_SQL'] = f"""
-            BEGIN
-              FOR CX IN ( SELECT { ','.join(campos_cur) }
-                            FROM DUAL )
-              loop
-                update {tabela}  set
-                  { ','.join([ xx + " = cx." + xx for xx in campos]) }
-                where 1=1
-                  {campos_key};
-
-                if (SQL%ROWCOUNT = 0) then
-                  insert into {tabela} ( { ','.join(campos) } )
-                  values ( { ','.join([ "cx." + xx for xx in campos]) } );
-                end if;
-              end loop;
-            END;
-            """
-       
       etl_utils.log(self.logger_id, "Loading Params Transforms.")
       for transf,filter,lookups in transforms:
         sps     = "      "
@@ -414,6 +331,7 @@ class ETL:
         x={"datetime":datetime}
         exec( etl_utils.CONSTANT_TRANSFORMS % (filter, sps_txt, self.apply_filter( transf.read())  ), x)
         self.transformations.append(x)
+
 
       etl_utils.log(self.logger_id, "#")
       etl_utils.log(self.logger_id, "### Starting Execution")

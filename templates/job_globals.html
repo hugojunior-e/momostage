@@ -10,10 +10,10 @@
 			tb                            = id_parametros_values.querySelectorAll("table")[0];
 			id_globals_edit.style.display = 'block';
 			id_globals_edit.rowid         = tb.rows[idx].cells[0].value;
-			GROUP_NAME.value              = tb.rows[idx].cells[1].innerHTML;
-			PARAM_NAME.value              = tb.rows[idx].cells[2].innerHTML;
+			GROUP_NAME.value              = tb.rows[idx].cells[1].value;
+			PARAM_NAME.value              = tb.rows[idx].cells[2].value;
 			PARAM_VALUE.value             = tb.rows[idx].cells[3].value;
-			DESCRIPTION.value             = tb.rows[idx].cells[4].innerHTML;
+			DESCRIPTION.value             = tb.rows[idx].cells[4].value;
 		}
 
 		function jsAdd() {
@@ -41,6 +41,12 @@
 			}, null);
 		}			
 
+        function js_test_connection(ddb) {
+            ajax("/info", { "name":"test_connection", "db_name": ddb }, function(a) {
+                alert(a.message);
+            }, null);
+        }		
+
 		function jsJobGlobalsDetail(x) {
 			id_globals_edit.style.display = 'none';
 
@@ -51,10 +57,17 @@
 				id_parametros_values.querySelectorAll("tr").forEach((e, idx) => {
 					if (idx > 0) {
 						e.cells[0].value = e.cells[0].innerHTML;
-						e.cells[0].innerHTML  = "<a href=# onclick=jsEdit(" + idx + ") >edit</a>";
+						e.cells[1].value = e.cells[1].innerHTML;
+						e.cells[2].value = e.cells[2].innerHTML;
+						e.cells[3].value = e.cells[3].innerHTML.replaceAll("&lt;","<").replaceAll("&gt;",">");;
+						e.cells[4].value = e.cells[4].innerHTML;
 
-						e.cells[3].value = e.cells[3].innerHTML.replaceAll("&lt;","<").replaceAll("&gt;",">");
+						e.cells[0].innerHTML  = "<a href=# onclick=jsEdit(" + idx + ") >edit</a>";
 						e.cells[3].innerHTML = "[...]";
+
+						if ( e.cells[1].value.includes("DATABASE") ) {
+							e.cells[2].innerHTML  = "[<a href=# onclick=js_test_connection('" + e.cells[2].value + "') >test</a>] - " + e.cells[2].value;
+						}
 					}
 				});
 
